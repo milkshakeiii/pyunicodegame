@@ -43,9 +43,6 @@ Homepage = "https://github.com/henry/pyunicodegame"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-pyunicodegame = ["bundled_fonts/*.bdf"]
-
 [tool.ruff]
 line-length = 100
 target-version = "py310"
