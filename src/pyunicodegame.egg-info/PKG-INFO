@@ -1,3 +1,30 @@
+Metadata-Version: 2.4
+Name: pyunicodegame
+Version: 0.1.0
+Summary: A Cogmind-inspired pygame library for TUI-style graphics with glow effects and particles
+Author: Henry
+License: MIT
+Project-URL: Homepage, https://github.com/henry/pyunicodegame
+Keywords: pygame,tui,ascii,roguelike,graphics,unicode
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Games/Entertainment
+Classifier: Topic :: Software Development :: Libraries :: pygame
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: pygame>=2.6.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+
 # pyunicodegame
 
 A Cogmind-inspired pygame library for TUI-style graphics with glow effects and particle systems.
