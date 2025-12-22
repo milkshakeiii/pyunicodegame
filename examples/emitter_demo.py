@@ -107,6 +107,20 @@ def create_all_emitters(root):
     )
     emitters.append(("Rain", rain))
 
+    # 7. Explosion - short burst in all directions
+    explosion = pyunicodegame.create_emitter(
+        x=10, y=8,
+        chars="*#@%+",
+        colors=[(255, 255, 100), (255, 200, 50), (255, 150, 0), (255, 100, 0), (255, 50, 0)],
+        spawn_rate=200,  # Lots of particles very quickly
+        speed=12, speed_variance=0.5,
+        direction=0, arc=360,  # All directions
+        drag=0.15,
+        fade_time=0.6, fade_time_variance=0.3,
+        emitter_duration=0.15,  # Very short burst
+    )
+    emitters.append(("Explosion", explosion))
+
     # Add all emitters to window
     for name, emitter in emitters:
         root.add_emitter(emitter)
@@ -138,6 +152,7 @@ def main():
             (44, 16, "Magic"),
             (56, 22, "Fountain"),
             (68, 8, "Rain"),
+            (10, 14, "Explosion"),
         ]
         for x, y, label in labels:
             root.put_string(x - len(label) // 2, y, label, (80, 80, 80))
@@ -145,12 +160,10 @@ def main():
         # Instructions
         root.put_string(1, 1, "SPACE: respawn emitters   Q: quit", (100, 100, 100))
 
-        # Show active emitter count
+        # Show active emitter and particle count (bottom-middle)
         active = sum(1 for name, e in emitters if e.alive)
-        root.put_string(1, 23, f"Active emitters: {active}/{len(emitters)}", (80, 80, 80))
-
-        # Show particle count
-        root.put_string(50, 23, f"Particles: {len(root._sprites)}", (80, 80, 80))
+        status = f"Emitters: {active}/{len(emitters)}  Particles: {len(root._sprites)}"
+        root.put_string(40 - len(status) // 2, 23, status, (80, 80, 80))
 
     pyunicodegame.run(render=render, on_key=on_key)
 
