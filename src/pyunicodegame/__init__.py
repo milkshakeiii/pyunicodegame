@@ -29,9 +29,14 @@ PUBLIC API:
     create_emitter(x, y, chars, spawn_rate, ...) - Create a particle emitter
     create_animation(name, frame_indices, ...) - Create a named animation with offsets
     create_light(x, y, radius, color, ...) - Create a light source with shadows
+    set_camera(x, y, mode, depth_scale) - Configure global camera for parallax
+    get_camera() - Get camera state (x, y, mode, depth_scale)
+    move_camera(dx, dy) - Move camera by relative amount
     Window.set_bloom(enabled, threshold, ...) - Enable bloom post-processing on window
     Window.add_light(light) - Add light to window (auto-enables lighting)
     Window.set_lighting(enabled, ambient) - Configure lighting system
+    Window.depth - Parallax depth (0 = at camera, higher = farther)
+    Window.fixed - If True, window ignores camera (for UI layers)
     Sprite.emissive / EffectSprite.emissive - Mark sprite to always glow (bypasses threshold)
     Sprite.blocks_light / EffectSprite.blocks_light - Mark sprite to cast shadows
 """
@@ -53,6 +58,7 @@ __all__ = [
     "EffectSpriteEmitter", "create_emitter",
     "Animation", "create_animation",
     "Light", "create_light",
+    "set_camera", "get_camera", "move_camera",
 ]
 
 # Font configuration
@@ -75,6 +81,12 @@ _windows: Dict[str, "Window"] = {}
 _fullscreen: bool = False
 _windowed_size: Tuple[int, int] = (0, 0)  # Original window size for restoring
 _render_surface: pygame.Surface = None  # Off-screen surface for fullscreen scaling
+
+# Camera system
+_camera_x: float = 0.0  # Position in pixels
+_camera_y: float = 0.0
+_camera_mode: str = "orthographic"  # or "perspective"
+_camera_depth_scale: float = 0.1  # How much depth affects parallax
 
 
 def _get_font_dimensions(font: pygame.freetype.Font) -> Tuple[int, int]:
@@ -159,6 +171,8 @@ class Window:
         self.alpha = alpha
         self.scale = scale
         self.visible = True
+        self.depth = 0.0  # Parallax depth (0 = at camera plane)
+        self.fixed = False  # If True, ignores camera (for UI)
         self._bg = bg if bg is not None else (0, 0, 0, 0)  # Default transparent
         self._sprites: List["Sprite"] = []
         self._emitters: List["EffectSpriteEmitter"] = []
@@ -2083,15 +2097,26 @@ def run(
             if not window.visible:
                 continue
 
-            # Convert root cell coords to pixels
-            px = window.x * _root_cell_width
-            py = window.y * _root_cell_height
+            # Convert root cell coords to pixels, applying camera
+            if window.fixed:
+                # Fixed windows ignore camera (for UI)
+                px = window.x * _root_cell_width
+                py = window.y * _root_cell_height
+            elif _camera_mode == "orthographic":
+                # Orthographic: all windows move with camera equally
+                px = window.x * _root_cell_width - _camera_x
+                py = window.y * _root_cell_height - _camera_y
+            else:
+                # Perspective: depth affects parallax
+                factor = 1.0 / (1.0 + window.depth * _camera_depth_scale)
+                px = window.x * _root_cell_width - _camera_x * factor
+                py = window.y * _root_cell_height - _camera_y * factor
 
             # Apply alpha
             if window.alpha < 255:
                 window.surface.set_alpha(window.alpha)
 
-            _render_surface.blit(window.surface, (px, py))
+            _render_surface.blit(window.surface, (int(px), int(py)))
 
         # Blit render surface to display (with scaling in fullscreen)
         display = pygame.display.get_surface()
@@ -2136,3 +2161,71 @@ def quit() -> None:
     """
     global _running
     _running = False
+
+
+def set_camera(
+    x: float = None,
+    y: float = None,
+    mode: str = None,
+    depth_scale: float = None,
+) -> None:
+    """
+    Configure the global camera.
+
+    In orthographic mode, all windows move with camera 1:1.
+    In perspective mode, windows with higher depth values move slower (parallax).
+
+    Args:
+        x: Camera X position in pixels (None = unchanged)
+        y: Camera Y position in pixels (None = unchanged)
+        mode: "orthographic" or "perspective" (None = unchanged)
+        depth_scale: How much depth affects parallax (default 0.1, None = unchanged)
+
+    Example:
+        # Enable perspective mode for parallax
+        pyunicodegame.set_camera(mode="perspective", depth_scale=0.1)
+
+        # Move camera to position
+        pyunicodegame.set_camera(x=100, y=50)
+    """
+    global _camera_x, _camera_y, _camera_mode, _camera_depth_scale
+    if x is not None:
+        _camera_x = x
+    if y is not None:
+        _camera_y = y
+    if mode is not None:
+        if mode not in ("orthographic", "perspective"):
+            raise ValueError(f"Invalid camera mode: {mode}. Use 'orthographic' or 'perspective'.")
+        _camera_mode = mode
+    if depth_scale is not None:
+        _camera_depth_scale = depth_scale
+
+
+def get_camera() -> Tuple[float, float, str, float]:
+    """
+    Get the current camera state.
+
+    Returns:
+        Tuple of (x, y, mode, depth_scale)
+
+    Example:
+        x, y, mode, depth_scale = pyunicodegame.get_camera()
+    """
+    return _camera_x, _camera_y, _camera_mode, _camera_depth_scale
+
+
+def move_camera(dx: float, dy: float) -> None:
+    """
+    Move the camera by a relative amount.
+
+    Args:
+        dx: Horizontal movement in pixels
+        dy: Vertical movement in pixels
+
+    Example:
+        # Move camera right
+        pyunicodegame.move_camera(5, 0)
+    """
+    global _camera_x, _camera_y
+    _camera_x += dx
+    _camera_y += dy
