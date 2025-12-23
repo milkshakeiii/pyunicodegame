@@ -17,20 +17,20 @@ player = pyunicodegame.create_sprite('''
 ''', fg=(0, 255, 100))
 
 player.add_frame('''
-    O
-   /|\\
-   /
+   \\O/
+    |
+   / \\
 ''')
 
-walk = pyunicodegame.create_animation(
-    "walk",
-    frame_indices=[0, 1, 0, 2],
-    frame_duration=0.15,
-    offsets=[(0, 0), (0, -2), (0, 0), (0, -2)],  # Bob up on steps
-    loop=True
+jump = pyunicodegame.create_animation(
+    "jump",
+    frame_indices=[0, 1, 1, 1, 0],
+    frame_duration=0.1,
+    offsets=[(0, 0), (0, -8), (0, -12), (0, -8), (0, 0)],  # Arc upward
+    loop=False
 )
-player.add_animation(walk)
-player.play_animation("walk")
+player.add_animation(jump)
+player.play_animation("jump")
 ```
 
 ### Particle Emitters
