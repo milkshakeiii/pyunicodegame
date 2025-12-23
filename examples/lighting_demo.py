@@ -61,8 +61,7 @@ def main():
     ]
 
     for wx, wy in wall_positions:
-        wall = pyunicodegame.create_sprite("#", fg=(100, 100, 100))
-        wall.blocks_light = True
+        wall = pyunicodegame.create_sprite("#", fg=(100, 100, 100), blocks_light=True)
         wall.move_to(wx, wy)
         root.add_sprite(wall)
         walls.append(wall)

@@ -24,7 +24,7 @@ PUBLIC API:
     create_window(name, x, y, width, height, ...) - Create a named window
     get_window(name) - Get a window by name ("root" is auto-created)
     remove_window(name) - Remove a window
-    create_sprite(pattern, fg, bg, char_colors, z_index) - Create a sprite from a pattern string
+    create_sprite(pattern, fg, bg, char_colors, z_index, blocks_light) - Create a sprite from a pattern string
     create_effect(pattern, x, y, vx, vy, ..., z_index) - Create an effect sprite with velocity/drag/fade
     create_emitter(x, y, chars, spawn_rate, ..., z_index) - Create a particle emitter
     create_animation(name, frame_indices, ...) - Create a named animation with offsets
@@ -50,7 +50,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 import pygame
 import pygame.freetype
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 __all__ = [
     "init", "run", "quit",
     "create_window", "get_window", "remove_window", "Window",
@@ -1558,6 +1558,7 @@ def create_sprite(
     bg: Optional[Tuple[int, int, int, int]] = None,
     char_colors: Optional[Dict[str, Tuple[int, int, int]]] = None,
     z_index: int = 0,
+    blocks_light: bool = False,
 ) -> Sprite:
     """
     Create a single-frame sprite from a multi-line string pattern.
@@ -1569,6 +1570,7 @@ def create_sprite(
         bg: Default background color (None = transparent)
         char_colors: Optional dict mapping characters to foreground colors
         z_index: Drawing order within window (higher = on top)
+        blocks_light: If True, sprite casts shadows in lighting system
 
     Returns:
         A new Sprite object
@@ -1637,6 +1639,7 @@ def create_sprite(
     frame = SpriteFrame(chars, fg_colors)
     sprite = Sprite([frame], fg, bg)
     sprite.z_index = z_index
+    sprite.blocks_light = blocks_light
     return sprite
 
 
@@ -1653,6 +1656,7 @@ def create_effect(
     duration: float = 0.0,
     char_colors: Optional[Dict[str, Tuple[int, int, int]]] = None,
     z_index: int = 0,
+    blocks_light: bool = False,
 ) -> EffectSprite:
     """
     Create an effect sprite with velocity, drag, and fade.
@@ -1668,6 +1672,7 @@ def create_effect(
         duration: Seconds until death (0 = infinite, use fade_time)
         char_colors: Optional per-character color overrides
         z_index: Drawing order within window (higher = on top)
+        blocks_light: If True, sprite casts shadows in lighting system
 
     Returns:
         An EffectSprite ready to add to a window
@@ -1740,6 +1745,7 @@ def create_effect(
     effect.fade_time = fade_time
     effect.duration = duration
     effect.z_index = z_index
+    effect.blocks_light = blocks_light
     return effect
 
 
