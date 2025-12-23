@@ -4,6 +4,25 @@ A pygame library for TUI-style unicode graphics with sprites, animations, partic
 
 ## Features
 
+### Dynamic Lighting
+Point lights with color, falloff, and shadow casting from sprites.
+
+![Lighting Demo](assets/lighting.gif)
+
+```python
+torch = pyunicodegame.create_light(
+    x=30, y=15,
+    radius=12,
+    color=(255, 180, 100),
+    intensity=1.0,
+    falloff=1.5,
+    follow_sprite=player
+)
+window.add_light(torch)
+
+wall = pyunicodegame.create_sprite("#", fg=(100, 100, 100), blocks_light=True)
+```
+
 ### Sprite Animation
 Multi-frame sprites with smooth visual offsets (cell position unaffected).
 
@@ -48,25 +67,6 @@ fire = pyunicodegame.create_emitter(
     drag=0.3, fade_time=0.8
 )
 window.add_emitter(fire)
-```
-
-### Dynamic Lighting
-Point lights with color, falloff, and shadow casting from sprites.
-
-![Lighting Demo](assets/lighting.gif)
-
-```python
-torch = pyunicodegame.create_light(
-    x=30, y=15,
-    radius=12,
-    color=(255, 180, 100),
-    intensity=1.0,
-    falloff=1.5,
-    follow_sprite=player
-)
-window.add_light(torch)
-
-wall = pyunicodegame.create_sprite("#", fg=(100, 100, 100), blocks_light=True)
 ```
 
 ### Bloom Post-Processing
