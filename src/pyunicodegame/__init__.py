@@ -24,9 +24,9 @@ PUBLIC API:
     create_window(name, x, y, width, height, ...) - Create a named window
     get_window(name) - Get a window by name ("root" is auto-created)
     remove_window(name) - Remove a window
-    create_sprite(pattern, fg, bg, char_colors) - Create a sprite from a pattern string
-    create_effect(pattern, x, y, vx, vy, ...) - Create an effect sprite with velocity/drag/fade
-    create_emitter(x, y, chars, spawn_rate, ...) - Create a particle emitter
+    create_sprite(pattern, fg, bg, char_colors, z_index) - Create a sprite from a pattern string
+    create_effect(pattern, x, y, vx, vy, ..., z_index) - Create an effect sprite with velocity/drag/fade
+    create_emitter(x, y, chars, spawn_rate, ..., z_index) - Create a particle emitter
     create_animation(name, frame_indices, ...) - Create a named animation with offsets
     create_light(x, y, radius, color, ...) - Create a light source with shadows
     set_camera(x, y, mode, depth_scale) - Configure global camera for parallax
@@ -39,6 +39,7 @@ PUBLIC API:
     Window.fixed - If True, window ignores camera (for UI layers)
     Sprite.emissive / EffectSprite.emissive - Mark sprite to always glow (bypasses threshold)
     Sprite.blocks_light / EffectSprite.blocks_light - Mark sprite to cast shadows
+    Sprite.z_index / EffectSprite.z_index - Drawing order within window (higher = on top)
 """
 
 import math
@@ -345,14 +346,15 @@ class Window:
                          if not (hasattr(s, 'alive') and not s.alive)]
 
     def draw_sprites(self) -> None:
-        """Draw all visible sprites to this window (call this in your render function)."""
-        for sprite in self._sprites:
+        """Draw all visible sprites to this window (called automatically)."""
+        sorted_sprites = sorted(self._sprites, key=lambda s: s.z_index)
+        for sprite in sorted_sprites:
             if sprite.visible:
                 sprite.draw(self)
 
         # If bloom is enabled, also draw emissive sprites to emissive surface
         if self._bloom_enabled:
-            emissive_sprites = [s for s in self._sprites
+            emissive_sprites = [s for s in sorted_sprites
                                 if s.visible and getattr(s, 'emissive', False)]
             if emissive_sprites:
                 # Create or resize emissive surface as needed
@@ -706,6 +708,9 @@ class Sprite:
 
         # Lighting: if True, this sprite blocks light (casts shadows)
         self.blocks_light = False
+
+        # Drawing order within window (higher = on top)
+        self.z_index = 0
 
     def move_to(self, x: int, y: int) -> None:
         """
@@ -1067,6 +1072,9 @@ class EffectSprite:
         # Lighting: if True, this sprite blocks light (casts shadows)
         self.blocks_light = False
 
+        # Drawing order within window (higher = on top)
+        self.z_index = 0
+
     def update(self, dt: float, cell_width: int, cell_height: int) -> None:
         """Update position, velocity, fade, and duration."""
         if not self.alive:
@@ -1175,6 +1183,8 @@ class EffectSpriteEmitter:
         # Emitter lifetime
         emitter_duration: float = 0.0,
         max_particles: int = 100,
+        # Particle z-ordering
+        z_index: int = 0,
     ):
         """
         Create an effect sprite emitter.
@@ -1198,6 +1208,7 @@ class EffectSpriteEmitter:
             duration_variance: Multiplicative variance for duration
             emitter_duration: How long emitter runs (0 = infinite)
             max_particles: Maximum concurrent particles from this emitter
+            z_index: Drawing order for spawned particles (higher = on top)
         """
         self.x = x
         self.y = y
@@ -1218,6 +1229,7 @@ class EffectSpriteEmitter:
         self.duration_variance = duration_variance
         self.emitter_duration = emitter_duration
         self.max_particles = max_particles
+        self.z_index = z_index
 
         self.active = True
         self.alive = True
@@ -1296,6 +1308,7 @@ class EffectSpriteEmitter:
         effect.drag = self.drag
         effect.fade_time = ft
         effect.duration = dur
+        effect.z_index = self.z_index
 
         # Add to window and track
         window.add_sprite(effect)
@@ -1544,6 +1557,7 @@ def create_sprite(
     fg: Tuple[int, int, int] = (255, 255, 255),
     bg: Optional[Tuple[int, int, int, int]] = None,
     char_colors: Optional[Dict[str, Tuple[int, int, int]]] = None,
+    z_index: int = 0,
 ) -> Sprite:
     """
     Create a single-frame sprite from a multi-line string pattern.
@@ -1554,6 +1568,7 @@ def create_sprite(
         fg: Default foreground color for all characters
         bg: Default background color (None = transparent)
         char_colors: Optional dict mapping characters to foreground colors
+        z_index: Drawing order within window (higher = on top)
 
     Returns:
         A new Sprite object
@@ -1620,7 +1635,9 @@ def create_sprite(
                 row.append(None)
 
     frame = SpriteFrame(chars, fg_colors)
-    return Sprite([frame], fg, bg)
+    sprite = Sprite([frame], fg, bg)
+    sprite.z_index = z_index
+    return sprite
 
 
 def create_effect(
@@ -1635,6 +1652,7 @@ def create_effect(
     fade_time: float = 0.0,
     duration: float = 0.0,
     char_colors: Optional[Dict[str, Tuple[int, int, int]]] = None,
+    z_index: int = 0,
 ) -> EffectSprite:
     """
     Create an effect sprite with velocity, drag, and fade.
@@ -1649,6 +1667,7 @@ def create_effect(
         fade_time: Seconds until fully transparent (0 = no fade)
         duration: Seconds until death (0 = infinite, use fade_time)
         char_colors: Optional per-character color overrides
+        z_index: Drawing order within window (higher = on top)
 
     Returns:
         An EffectSprite ready to add to a window
@@ -1720,6 +1739,7 @@ def create_effect(
     effect.drag = drag
     effect.fade_time = fade_time
     effect.duration = duration
+    effect.z_index = z_index
     return effect
 
 
@@ -1782,6 +1802,7 @@ def create_emitter(
     duration_variance: float = 0.0,
     emitter_duration: float = 0.0,
     max_particles: int = 100,
+    z_index: int = 0,
 ) -> EffectSpriteEmitter:
     """
     Create an effect sprite emitter.
@@ -1805,6 +1826,7 @@ def create_emitter(
         duration_variance: Multiplicative variance for duration
         emitter_duration: How long emitter runs (0 = infinite)
         max_particles: Maximum concurrent particles
+        z_index: Drawing order for spawned particles (higher = on top)
 
     Returns:
         EffectSpriteEmitter ready to add to a window
@@ -1832,6 +1854,7 @@ def create_emitter(
         fade_time=fade_time, fade_time_variance=fade_time_variance,
         duration=duration, duration_variance=duration_variance,
         emitter_duration=emitter_duration, max_particles=max_particles,
+        z_index=z_index,
     )
 
 

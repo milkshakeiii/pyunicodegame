@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Parallax demo - nighttime road with palm trees and starry sky.
+Put demo - nighttime road with palm trees and starry sky.
 
-Demonstrates:
-- Multiple windows with different z-indexes
-- Different font sizes for parallax effect (background scrolls slower)
-- Alpha transparency
+Demonstrates using put() for manual character-by-character rendering:
+- Window.put(x, y, char, fg, bg) for drawing individual characters
+- Multiple windows with different z-indexes and font sizes
+- Manual scrolling and animation without sprites
+- Drawing complex shapes (moon, palm trees) with put() calls
 """
 
 import math
@@ -145,7 +146,7 @@ class Scene:
 
 
 def main():
-    pyunicodegame.init("Parallax Demo - Night Drive", width=80, height=30, bg=(5, 5, 15, 255))
+    pyunicodegame.init("Put Demo - Night Drive", width=80, height=30, bg=(5, 5, 15, 255))
 
     pyunicodegame.create_window(
         "sky", x=0, y=0, width=134, height=47,
