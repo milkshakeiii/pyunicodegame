@@ -32,8 +32,7 @@ def main():
     root.add_sprite(bright_star)
 
     # Dim sprite marked as emissive (will glow despite low brightness)
-    emissive_orb = pyunicodegame.create_sprite("O", fg=(100, 100, 200))
-    emissive_orb.emissive = True
+    emissive_orb = pyunicodegame.create_sprite("O", fg=(100, 100, 200), emissive=True)
     emissive_orb.move_to(40, 8)
     root.add_sprite(emissive_orb)
 

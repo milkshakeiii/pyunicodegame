@@ -81,8 +81,7 @@ window.set_bloom(enabled=True, threshold=180, blur_scale=4, intensity=1.0)
 star = pyunicodegame.create_sprite("*", fg=(255, 255, 200))
 
 # Dim sprites can be marked emissive to glow anyway
-orb = pyunicodegame.create_sprite("O", fg=(100, 100, 200))
-orb.emissive = True
+orb = pyunicodegame.create_sprite("O", fg=(100, 100, 200), emissive=True)
 ```
 
 ### Parallax Camera
@@ -92,16 +91,13 @@ Multi-layer scrolling with depth-based parallax effects in perspective mode. Ort
 
 ```python
 # Background layer - slow parallax
-mountains = pyunicodegame.create_window("mountains", 0, 0, 240, 25, z_index=1)
-mountains.depth = 4.0  # Far away, moves slowly
+mountains = pyunicodegame.create_window("mountains", 0, 0, 240, 25, z_index=1, depth=4.0)
 
 # Foreground layer - moves with camera
-foreground = pyunicodegame.create_window("fg", 0, 0, 240, 25, z_index=10)
-foreground.depth = 0.0  # At camera, moves 1:1
+foreground = pyunicodegame.create_window("fg", 0, 0, 240, 25, z_index=10, depth=0.0)
 
 # UI layer - fixed, ignores camera
-ui = pyunicodegame.create_window("ui", 0, 0, 80, 25, z_index=100)
-ui.fixed = True
+ui = pyunicodegame.create_window("ui", 0, 0, 80, 25, z_index=100, fixed=True)
 
 pyunicodegame.set_camera(x=400, y=0, mode="perspective", depth_scale=0.1)
 ```

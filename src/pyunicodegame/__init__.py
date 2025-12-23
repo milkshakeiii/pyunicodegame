@@ -21,10 +21,10 @@ PUBLIC API:
     init(title, width, height, bg) - Initialize pygame, create root window, return it
     run(update, render, on_key) - Run the main game loop
     quit() - Signal the game loop to exit
-    create_window(name, x, y, width, height, ...) - Create a named window
+    create_window(name, x, y, width, height, ..., depth, fixed) - Create a named window
     get_window(name) - Get a window by name ("root" is auto-created)
     remove_window(name) - Remove a window
-    create_sprite(pattern, fg, bg, char_colors, z_index, blocks_light) - Create a sprite from a pattern string
+    create_sprite(pattern, fg, bg, char_colors, z_index, blocks_light, emissive) - Create a sprite from a pattern string
     create_effect(pattern, x, y, vx, vy, ..., z_index) - Create an effect sprite with velocity/drag/fade
     create_emitter(x, y, chars, spawn_rate, ..., z_index) - Create a particle emitter
     create_animation(name, frame_indices, ...) - Create a named animation with offsets
@@ -1559,6 +1559,7 @@ def create_sprite(
     char_colors: Optional[Dict[str, Tuple[int, int, int]]] = None,
     z_index: int = 0,
     blocks_light: bool = False,
+    emissive: bool = False,
 ) -> Sprite:
     """
     Create a single-frame sprite from a multi-line string pattern.
@@ -1571,6 +1572,7 @@ def create_sprite(
         char_colors: Optional dict mapping characters to foreground colors
         z_index: Drawing order within window (higher = on top)
         blocks_light: If True, sprite casts shadows in lighting system
+        emissive: If True, sprite glows in bloom effect (bypasses threshold)
 
     Returns:
         A new Sprite object
@@ -1640,6 +1642,7 @@ def create_sprite(
     sprite = Sprite([frame], fg, bg)
     sprite.z_index = z_index
     sprite.blocks_light = blocks_light
+    sprite.emissive = emissive
     return sprite
 
 
@@ -1975,6 +1978,8 @@ def create_window(
     scale: float = 1.0,
     alpha: int = 255,
     bg: Optional[Tuple[int, int, int, int]] = None,
+    depth: float = 0.0,
+    fixed: bool = False,
 ) -> "Window":
     """
     Create a named window for rendering.
@@ -1990,6 +1995,8 @@ def create_window(
         scale: Additional scaling factor (default 1.0)
         alpha: Transparency 0-255 (default 255 = opaque)
         bg: Background color (R, G, B, A), default transparent
+        depth: Parallax depth (0 = at camera, higher = farther/slower)
+        fixed: If True, window ignores camera (for UI layers)
 
     Returns:
         The created Window object
@@ -2002,6 +2009,8 @@ def create_window(
         pyunicodegame.create_window("fg", 0, 0, 80, 30, z_index=10, font_name="6x13")
     """
     window = Window(name, x, y, width, height, z_index, font_name, scale, alpha, bg)
+    window.depth = depth
+    window.fixed = fixed
     _windows[name] = window
     return window
 

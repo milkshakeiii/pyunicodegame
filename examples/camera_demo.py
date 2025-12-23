@@ -22,33 +22,28 @@ def main():
     # Stars (fixed, doesn't scroll)
     stars_layer = pyunicodegame.create_window(
         "stars", 0, 0, scene_width, 50, z_index=0,
-        bg=(5, 5, 20, 255), scale=0.6
+        bg=(5, 5, 20, 255), scale=0.6, fixed=True
     )
-    stars_layer.fixed = True
 
     # Mountains (far background, slow parallax)
     mountains_layer = pyunicodegame.create_window(
-        "mountains", 0, 0, scene_width, 25, z_index=1, bg=(0, 0, 0, 0)
+        "mountains", 0, 0, scene_width, 25, z_index=1, bg=(0, 0, 0, 0), depth=4.0
     )
-    mountains_layer.depth = 4.0
 
     # Trees (midground, moderate parallax)
     trees_layer = pyunicodegame.create_window(
-        "trees", 0, 0, scene_width, 25, z_index=5, bg=(0, 0, 0, 0)
+        "trees", 0, 0, scene_width, 25, z_index=5, bg=(0, 0, 0, 0), depth=1.0
     )
-    trees_layer.depth = 1.0
 
     # Foreground (moves 1:1 with camera)
     fg = pyunicodegame.create_window(
-        "fg", 0, 0, scene_width, 25, z_index=10, bg=(0, 0, 0, 0)
+        "fg", 0, 0, scene_width, 25, z_index=10, bg=(0, 0, 0, 0), depth=0.0
     )
-    fg.depth = 0.0
 
     # UI (fixed overlay)
     ui = pyunicodegame.create_window(
-        "ui", 0, 0, 80, 25, z_index=100, bg=(0, 0, 0, 0)
+        "ui", 0, 0, 80, 25, z_index=100, bg=(0, 0, 0, 0), fixed=True
     )
-    ui.fixed = True
 
     # --- Stars (twinkling animation) ---
 
