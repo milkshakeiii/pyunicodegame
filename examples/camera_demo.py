@@ -52,7 +52,7 @@ def main():
         sy = random.randint(0, 49)
         b = 120 + random.randint(0, 60)  # base brightness
 
-        star = pyunicodegame.create_sprite("✦", fg=(b, b, b + 40))
+        star = pyunicodegame.create_sprite("✦", x=sx, y=sy, fg=(b, b, b + 40))
         star.add_frame("✧", fg=(b - 30, b - 30, b + 20))
         star.add_frame("·", fg=(b - 60, b - 60, b))
         star.add_frame("✧", fg=(b - 30, b - 30, b + 20))
@@ -63,7 +63,6 @@ def main():
         )
         star.add_animation(twinkle)
         star.play_animation("twinkle")
-        star.move_to(sx, sy)
         stars_layer.add_sprite(star)
 
     # --- Mountains ---
@@ -83,8 +82,9 @@ def main():
                 line = " " * padding + "◢" + "█" * (width - 2) + "◣" + " " * padding
             rows.append(line)
 
-        mountain = pyunicodegame.create_sprite("\n".join(rows), fg=color)
-        mountain.move_to(center_x - (max_width // 2 - 1), peak_y)
+        mountain = pyunicodegame.create_sprite(
+            "\n".join(rows), x=center_x - (max_width // 2 - 1), y=peak_y, fg=color
+        )
         window.add_sprite(mountain)
 
     for cx, py, color in [
@@ -112,23 +112,20 @@ def main():
     for i, tx in enumerate(tree_positions):
         if i % 2 == 0:
             tree = pyunicodegame.create_sprite(
-                round_tree, fg=(35, 90, 35),
+                round_tree, x=tx - 2, y=ground_y - 4, fg=(35, 90, 35),
                 char_colors={"█": (30, 85, 30)}
             )
-            tree.move_to(tx - 2, ground_y - 4)
         else:
             tree = pyunicodegame.create_sprite(
-                pine_tree, fg=(25, 75, 30),
+                pine_tree, x=tx - 3, y=ground_y - 4, fg=(25, 75, 30),
                 char_colors={"◢": (25, 75, 30), "◣": (25, 75, 30), "█": (30, 80, 35)}
             )
-            tree.move_to(tx - 3, ground_y - 4)
         trees_layer.add_sprite(tree)
 
     # --- Ground ---
 
     for y, color in [(ground_y, (45, 70, 35)), (ground_y + 1, (70, 50, 30)), (ground_y + 2, (55, 40, 25))]:
-        ground = pyunicodegame.create_sprite("█" * scene_width, fg=color)
-        ground.move_to(0, y)
+        ground = pyunicodegame.create_sprite("█" * scene_width, x=0, y=y, fg=color)
         fg.add_sprite(ground)
 
     # --- Houses ---
@@ -139,18 +136,15 @@ def main():
 
     for hx in [25, 85, 145, 205]:
         house = pyunicodegame.create_sprite(
-            house_pattern, fg=(160, 110, 60),
+            house_pattern, x=hx - 1, y=ground_y - 2, fg=(160, 110, 60),
             char_colors={"◢": (140, 80, 40), "◣": (140, 80, 40), "█": (160, 110, 60)}
         )
-        house.move_to(hx - 1, ground_y - 2)
         fg.add_sprite(house)
 
     # --- Campfires ---
 
     for cfx in [50, 120, 180]:
-        fire = pyunicodegame.create_sprite("✱", fg=(255, 180, 50))
-        fire.emissive = True
-        fire.move_to(cfx, ground_y - 1)
+        fire = pyunicodegame.create_sprite("✱", x=cfx, y=ground_y - 1, fg=(255, 180, 50), emissive=True)
         fg.add_sprite(fire)
 
     # --- Signs ---
@@ -161,16 +155,14 @@ def main():
 
     for sx in [70, 160, 220]:
         sign = pyunicodegame.create_sprite(
-            sign_pattern, fg=(100, 75, 40),
+            sign_pattern, x=sx - 1, y=ground_y - 2, fg=(100, 75, 40),
             char_colors={"▬": (120, 90, 50), "│": (100, 75, 40)}
         )
-        sign.move_to(sx - 1, ground_y - 2)
         fg.add_sprite(sign)
 
     # --- Player ---
 
-    player = pyunicodegame.create_sprite("@", fg=(255, 255, 100))
-    player.move_to(100, ground_y - 1)
+    player = pyunicodegame.create_sprite("@", x=100, y=ground_y - 1, fg=(255, 255, 100))
     fg.add_sprite(player)
 
     # --- Camera setup ---

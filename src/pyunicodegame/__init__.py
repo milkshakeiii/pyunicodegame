@@ -24,7 +24,7 @@ PUBLIC API:
     create_window(name, x, y, width, height, ..., depth, fixed) - Create a named window
     get_window(name) - Get a window by name ("root" is auto-created)
     remove_window(name) - Remove a window
-    create_sprite(pattern, fg, bg, char_colors, z_index, blocks_light, emissive) - Create a sprite from a pattern string
+    create_sprite(pattern, x, y, fg, ..., lerp_speed) - Create a sprite at position
     create_effect(pattern, x, y, vx, vy, ..., z_index) - Create an effect sprite with velocity/drag/fade
     create_emitter(x, y, chars, spawn_rate, ..., z_index) - Create a particle emitter
     create_animation(name, frame_indices, ...) - Create a named animation with offsets
@@ -1579,6 +1579,8 @@ def _apply_bloom(
 
 def create_sprite(
     pattern: str,
+    x: int,
+    y: int,
     fg: Tuple[int, int, int] = (255, 255, 255),
     bg: Optional[Tuple[int, int, int, int]] = None,
     char_colors: Optional[Dict[str, Tuple[int, int, int]]] = None,
@@ -1593,6 +1595,7 @@ def create_sprite(
     Args:
         pattern: Multi-line string defining the sprite shape.
                  Spaces are transparent. Leading/trailing blank lines are trimmed.
+        x, y: Initial position in cells
         fg: Default foreground color for all characters
         bg: Default background color (None = transparent)
         char_colors: Optional dict mapping characters to foreground colors
@@ -1609,7 +1612,7 @@ def create_sprite(
             @
            /|\\
            / \\
-        ''', fg=(0, 255, 0), char_colors={'@': (255, 255, 0)})
+        ''', x=10, y=5, fg=(0, 255, 0), char_colors={'@': (255, 255, 0)})
     """
     # Parse pattern into lines, stripping common leading whitespace
     lines = pattern.split('\n')
@@ -1667,6 +1670,9 @@ def create_sprite(
 
     frame = SpriteFrame(chars, fg_colors)
     sprite = Sprite([frame], fg, bg)
+    sprite.x = x
+    sprite.y = y
+    sprite._teleport_pending = True  # Snap visual position on first update
     sprite.z_index = z_index
     sprite.blocks_light = blocks_light
     sprite.emissive = emissive

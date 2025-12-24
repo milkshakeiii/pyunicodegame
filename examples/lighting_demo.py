@@ -14,8 +14,7 @@ def main():
     root = pyunicodegame.init("Lighting Demo", width=60, height=30, bg=(10, 10, 15, 255))
 
     # Create player
-    player = pyunicodegame.create_sprite("@", fg=(255, 255, 255))
-    player.move_to(30, 15)
+    player = pyunicodegame.create_sprite("@", x=30, y=15, fg=(255, 255, 255))
     root.add_sprite(player)
 
     # Player's torch - warm light that follows player
@@ -40,8 +39,7 @@ def main():
     root.add_light(crystal_light)
 
     # Crystal sprite
-    crystal = pyunicodegame.create_sprite("*", fg=(150, 200, 255))
-    crystal.move_to(45, 8)
+    crystal = pyunicodegame.create_sprite("*", x=45, y=8, fg=(150, 200, 255))
     root.add_sprite(crystal)
 
     # Create some walls that block light
@@ -61,8 +59,7 @@ def main():
     ]
 
     for wx, wy in wall_positions:
-        wall = pyunicodegame.create_sprite("#", fg=(100, 100, 100), blocks_light=True)
-        wall.move_to(wx, wy)
+        wall = pyunicodegame.create_sprite("#", x=wx, y=wy, fg=(100, 100, 100), blocks_light=True)
         root.add_sprite(wall)
         walls.append(wall)
 

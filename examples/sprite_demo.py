@@ -17,10 +17,7 @@ def main():
         O
        /|\\
        / \\
-    ''', fg=(0, 255, 100), char_colors={'O': (255, 220, 180)})
-
-    player.move_to(20, 10)
-    player.lerp_speed = 10  # 10 cells per second
+    ''', x=20, y=10, fg=(0, 255, 100), char_colors={'O': (255, 220, 180)}, lerp_speed=10)
 
     root.add_sprite(player)
 
@@ -29,16 +26,14 @@ def main():
         *
        /|\\
         |
-    ''', fg=(0, 180, 60), char_colors={'*': (100, 255, 100)})
-    tree.move_to(5, 10)
+    ''', x=5, y=10, fg=(0, 180, 60), char_colors={'*': (100, 255, 100)})
     root.add_sprite(tree)
 
     tree2 = pyunicodegame.create_sprite('''
         *
        /|\\
         |
-    ''', fg=(0, 150, 50), char_colors={'*': (80, 220, 80)})
-    tree2.move_to(35, 8)
+    ''', x=35, y=8, fg=(0, 150, 50), char_colors={'*': (80, 220, 80)})
     root.add_sprite(tree2)
 
     def on_key(key):

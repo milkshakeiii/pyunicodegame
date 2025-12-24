@@ -27,18 +27,15 @@ def main():
 
     # Create some sprites to demonstrate emissive property
     # Bright sprite (will glow due to high brightness)
-    bright_star = pyunicodegame.create_sprite("*", fg=(255, 255, 200))
-    bright_star.move_to(20, 8)
+    bright_star = pyunicodegame.create_sprite("*", x=20, y=8, fg=(255, 255, 200))
     root.add_sprite(bright_star)
 
     # Dim sprite marked as emissive (will glow despite low brightness)
-    emissive_orb = pyunicodegame.create_sprite("O", fg=(100, 100, 200), emissive=True)
-    emissive_orb.move_to(40, 8)
+    emissive_orb = pyunicodegame.create_sprite("O", x=40, y=8, fg=(100, 100, 200), emissive=True)
     root.add_sprite(emissive_orb)
 
     # Dim sprite NOT emissive (won't glow)
-    dim_dot = pyunicodegame.create_sprite(".", fg=(100, 100, 100))
-    dim_dot.move_to(60, 8)
+    dim_dot = pyunicodegame.create_sprite(".", x=60, y=8, fg=(100, 100, 100))
     root.add_sprite(dim_dot)
 
     # Create a fire emitter with emissive particles

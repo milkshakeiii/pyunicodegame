@@ -20,7 +20,7 @@ def main():
         O
        /|\\
        / \\
-    ''', fg=(0, 255, 100), char_colors={'O': (255, 220, 180)})
+    ''', x=25, y=12, fg=(0, 255, 100), char_colors={'O': (255, 220, 180)}, lerp_speed=8)
 
     # Frame 1: Walk left foot forward
     player.add_frame('''
@@ -42,9 +42,6 @@ def main():
         |
        / \\
     ''')
-
-    player.move_to(25, 12)
-    player.lerp_speed = 8  # cells per second
 
     # Create walk animation with bobbing offset
     walk = pyunicodegame.create_animation(
