@@ -44,7 +44,7 @@ def main():
     ''')
 
     player.move_to(25, 12)
-    player._move_speed = 8  # cells per second
+    player.lerp_speed = 8  # cells per second
 
     # Create walk animation with bobbing offset
     walk = pyunicodegame.create_animation(

@@ -37,6 +37,9 @@ PUBLIC API:
     Window.set_lighting(enabled, ambient) - Configure lighting system
     Window.depth - Parallax depth (0 = at camera, higher = farther)
     Window.fixed - If True, window ignores camera (for UI layers)
+    Window.cell_size - Cell dimensions in pixels (width, height)
+    Sprite.lerp_speed - Interpolation speed in cells/sec (0 = instant)
+    Sprite.move_to(x, y, teleport=False) - Move sprite, teleport=True snaps instantly
     Sprite.emissive / EffectSprite.emissive - Mark sprite to always glow (bypasses threshold)
     Sprite.blocks_light / EffectSprite.blocks_light - Mark sprite to cast shadows
     Sprite.z_index / EffectSprite.z_index - Drawing order within window (higher = on top)
@@ -209,6 +212,11 @@ class Window:
     def set_bg(self, color: Tuple[int, int, int, int]) -> None:
         """Set the background color (R, G, B, A)."""
         self._bg = color
+
+    @property
+    def cell_size(self) -> Tuple[int, int]:
+        """Cell dimensions in pixels (width, height)."""
+        return (self._cell_width, self._cell_height)
 
     def put(
         self,
@@ -688,7 +696,8 @@ class Sprite:
         # Visual position (private, interpolates toward logical)
         self._visual_x = 0.0  # In pixels
         self._visual_y = 0.0
-        self._move_speed = 0.0  # Cells per second (0 = instant)
+        self._lerp_speed = 0.0  # Cells per second (0 = instant)
+        self._teleport_pending = False  # Flag to force snap on next update
 
         # Animation system
         self._animations: Dict[str, Animation] = {}
@@ -712,15 +721,30 @@ class Sprite:
         # Drawing order within window (higher = on top)
         self.z_index = 0
 
-    def move_to(self, x: int, y: int) -> None:
+    @property
+    def lerp_speed(self) -> float:
+        """Interpolation speed in cells per second (0 = instant snap)."""
+        return self._lerp_speed
+
+    @lerp_speed.setter
+    def lerp_speed(self, value: float) -> None:
+        self._lerp_speed = value
+
+    def move_to(self, x: int, y: int, teleport: bool = False) -> None:
         """
         Move the sprite to a new logical position.
 
-        The logical position changes instantly. The visual position
-        will interpolate toward it based on _move_speed.
+        Args:
+            x, y: Target position in cells
+            teleport: If True, snap visual position instantly (bypass interpolation)
+
+        The logical position always changes instantly. The visual position
+        will interpolate toward it based on lerp_speed, unless teleport=True.
         """
         self.x = x
         self.y = y
+        if teleport:
+            self._teleport_pending = True
 
     def add_frame(
         self,
@@ -963,17 +987,18 @@ class Sprite:
         target_px = self.x * cell_width
         target_py = self.y * cell_height
 
-        if self._move_speed <= 0:
-            # Instant movement
+        if self._lerp_speed <= 0 or self._teleport_pending:
+            # Instant movement (snap)
             self._visual_x = float(target_px)
             self._visual_y = float(target_py)
+            self._teleport_pending = False
         else:
             dx = target_px - self._visual_x
             dy = target_py - self._visual_y
             distance = math.sqrt(dx * dx + dy * dy)
 
             if distance > 0.5:  # Small threshold to avoid jitter
-                speed_px = self._move_speed * cell_width  # cells/sec -> pixels/sec
+                speed_px = self._lerp_speed * cell_width  # cells/sec -> pixels/sec
                 move_dist = min(speed_px * dt, distance)
                 self._visual_x += (dx / distance) * move_dist
                 self._visual_y += (dy / distance) * move_dist
@@ -1560,6 +1585,7 @@ def create_sprite(
     z_index: int = 0,
     blocks_light: bool = False,
     emissive: bool = False,
+    lerp_speed: float = 0.0,
 ) -> Sprite:
     """
     Create a single-frame sprite from a multi-line string pattern.
@@ -1573,6 +1599,7 @@ def create_sprite(
         z_index: Drawing order within window (higher = on top)
         blocks_light: If True, sprite casts shadows in lighting system
         emissive: If True, sprite glows in bloom effect (bypasses threshold)
+        lerp_speed: Interpolation speed in cells/sec (0 = instant snap)
 
     Returns:
         A new Sprite object
@@ -1643,6 +1670,7 @@ def create_sprite(
     sprite.z_index = z_index
     sprite.blocks_light = blocks_light
     sprite.emissive = emissive
+    sprite.lerp_speed = lerp_speed
     return sprite
 
 

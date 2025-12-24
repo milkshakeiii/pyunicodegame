@@ -20,7 +20,7 @@ def main():
     ''', fg=(0, 255, 100), char_colors={'O': (255, 220, 180)})
 
     player.move_to(20, 10)
-    player._move_speed = 10  # 10 cells per second
+    player.lerp_speed = 10  # 10 cells per second
 
     root.add_sprite(player)
 
