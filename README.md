@@ -135,3 +135,5 @@ python examples/lighting_demo.py  # Lighting & shadows
 python examples/bloom_demo.py     # Bloom post-processing
 python examples/camera_demo.py    # Parallax scrolling
 ```
+
+![Demo](assets/demo.gif)
