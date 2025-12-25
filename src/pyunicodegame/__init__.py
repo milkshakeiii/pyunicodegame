@@ -68,6 +68,7 @@ __all__ = [
 # Font configuration
 FONT_DIR = os.path.join(os.path.dirname(__file__), "fonts")
 AVAILABLE_FONTS = {
+    "5x8": "5x8.bdf",
     "6x13": "6x13.bdf",
     "9x18": "9x18.bdf",
     "10x20": "10x20.bdf",
@@ -1953,12 +1954,13 @@ def init(
     width: int = 80,
     height: int = 25,
     bg: Optional[Tuple[int, int, int, int]] = None,
+    font_name: str = DEFAULT_FONT,
 ) -> "Window":
     """
     Initialize pyunicodegame and pygame, creating a window sized for unicode cells.
 
-    Each cell is 10x20 pixels (from the bundled BDF font). So width=80, height=25
-    creates an 800x500 pixel window.
+    Cell size depends on the root font: 5x8, 6x13, 9x18, or 10x20 pixels.
+    So width=80, height=25 with 10x20 font creates an 800x500 pixel window.
 
     A root window is automatically created that fills the screen.
 
@@ -1967,6 +1969,8 @@ def init(
         width: Grid width in unicode cells (default 80)
         height: Grid height in unicode cells (default 25)
         bg: Root window background color (R, G, B, A), default transparent
+        font_name: Font for the root window - "5x8", "6x13", "9x18", or "10x20" (default).
+            Also determines the base cell size and pygame window dimensions.
 
     Returns:
         The root Window object
@@ -1981,8 +1985,8 @@ def init(
     pygame.freetype.init()
 
     # Load root font and get cell dimensions
-    _load_font(DEFAULT_FONT)
-    _root_cell_width, _root_cell_height = _font_dimensions[DEFAULT_FONT]
+    _load_font(font_name)
+    _root_cell_width, _root_cell_height = _font_dimensions[font_name]
 
     # Create pygame display
     pixel_width = width * _root_cell_width
@@ -1997,7 +2001,7 @@ def init(
     _clock = pygame.time.Clock()
 
     # Create root window automatically
-    root = create_window("root", 0, 0, width, height, z_index=0, bg=bg)
+    root = create_window("root", 0, 0, width, height, z_index=0, font_name=font_name, bg=bg)
     return root
 
 

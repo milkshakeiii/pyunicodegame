@@ -5,12 +5,19 @@ Demo of Legacy Computing wedge characters (U+1FB3C-U+1FB67).
 Shows the 44 wedge characters and demonstrates using them to draw smooth shapes.
 """
 
+import argparse
 import pygame
 import pyunicodegame
 
+FONTS = ["5x8", "6x13", "9x18", "10x20"]
+
 
 def main():
-    root = pyunicodegame.init("Wedge Characters Demo", width=80, height=30, bg=(10, 10, 30, 255))
+    parser = argparse.ArgumentParser(description="Wedge characters demo")
+    parser.add_argument("--font", choices=FONTS, default="10x20", help="Font size to use")
+    args = parser.parse_args()
+
+    root = pyunicodegame.init("Wedge Characters Demo", width=80, height=30, bg=(10, 10, 30, 255), font_name=args.font)
 
     def render():
         # Title
@@ -65,8 +72,7 @@ def main():
 
         # Alternating wedge pairs for smooth diagonal:
         # Even rows: 🭦🭐 (indices 42, 20)
-        # Odd rows: 🭖🭀 (indices 26, 4)
-        # X advances every 2 rows (i // 2) for proper connection
+        # Odd rows: 🭖🭀 (indices 26, 4), indented by 1
         dx, dy = 32, 16
         color2 = (200, 150, 100)
         for i in range(6):
