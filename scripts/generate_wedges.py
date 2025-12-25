@@ -3,11 +3,15 @@
 Generate Legacy Computing wedge characters (U+1FB3C-U+1FB67) for BDF fonts.
 
 Usage:
-    python generate_wedges.py --width 10 --height 20 --output wedges.bdf
-    python generate_wedges.py -W 16 -H 16 -o wedges_16x16.bdf
+    python generate_wedges.py -W 10 -H 20 -o wedges.bdf
+    python generate_wedges.py -f existing.bdf -o wedges.bdf
+    python generate_wedges.py --add-to font.bdf --replace
+    python generate_wedges.py --preview
 """
 
 import argparse
+import re
+import sys
 
 
 # Define edge points as fractions of cell dimensions
@@ -28,43 +32,31 @@ POINTS = {
     'right_2_3': (1, 1/3),  # 2/3 up from bottom
 }
 
-# The 22 base wedge shapes, defined by (point_a, point_b, fill_side)
-# fill_side: 'below' means fill below/right of line, 'above' means fill above/left
-# The line goes from point_a to point_b
+# The 22 base wedge shapes, defined by (point_a, point_b)
+# Each fills the region where cross-product of line vector and point is >= 0
 WEDGE_DEFINITIONS = [
-    # 1-5: Wedges with diagonal from left edge going down (small triangles in BL)
-    ('left_1_3', 'bot_mid', 'above'),    # 1FB3C
-    ('left_1_3', 'BR', 'above'),          # 1FB3D
-    ('left_2_3', 'bot_mid', 'above'),    # 1FB3E
-    ('left_2_3', 'BR', 'above'),          # 1FB3F
-    ('TL', 'bot_mid', 'above'),           # 1FB40
-
-    # 6-10: Wedges with diagonal from left edge going up (fills BELOW the line)
-    ('left_2_3', 'top_mid', 'above'),    # 1FB41
-    ('left_2_3', 'TR', 'above'),          # 1FB42
-    ('left_1_3', 'top_mid', 'above'),    # 1FB43
-    ('left_1_3', 'TR', 'above'),          # 1FB44
-    ('BL', 'top_mid', 'above'),           # 1FB45
-
-    # 11: Horizontal-ish wedge
-    ('left_1_3', 'right_2_3', 'above'),  # 1FB46
-
-    # 12-16: Wedges from bottom edge going right (small triangles in BR)
-    ('bot_mid', 'right_1_3', 'above'),   # 1FB47
-    ('BL', 'right_1_3', 'above'),         # 1FB48
-    ('bot_mid', 'right_2_3', 'above'),   # 1FB49
-    ('BL', 'right_2_3', 'above'),         # 1FB4A
-    ('bot_mid', 'TR', 'above'),           # 1FB4B
-
-    # 17-21: Wedges from top edge going right (fills BELOW the line)
-    ('top_mid', 'right_2_3', 'above'),   # 1FB4C
-    ('TL', 'right_2_3', 'above'),         # 1FB4D
-    ('top_mid', 'right_1_3', 'above'),   # 1FB4E
-    ('TL', 'right_1_3', 'above'),         # 1FB4F
-    ('top_mid', 'BR', 'above'),           # 1FB50
-
-    # 22: Horizontal-ish wedge
-    ('left_2_3', 'right_1_3', 'above'),  # 1FB51
+    ('left_1_3', 'bot_mid'),    # 1FB3C
+    ('left_1_3', 'BR'),          # 1FB3D
+    ('left_2_3', 'bot_mid'),    # 1FB3E
+    ('left_2_3', 'BR'),          # 1FB3F
+    ('TL', 'bot_mid'),           # 1FB40
+    ('left_2_3', 'top_mid'),    # 1FB41
+    ('left_2_3', 'TR'),          # 1FB42
+    ('left_1_3', 'top_mid'),    # 1FB43
+    ('left_1_3', 'TR'),          # 1FB44
+    ('BL', 'top_mid'),           # 1FB45
+    ('left_1_3', 'right_2_3'),  # 1FB46
+    ('bot_mid', 'right_1_3'),   # 1FB47
+    ('BL', 'right_1_3'),         # 1FB48
+    ('bot_mid', 'right_2_3'),   # 1FB49
+    ('BL', 'right_2_3'),         # 1FB4A
+    ('bot_mid', 'TR'),           # 1FB4B
+    ('top_mid', 'right_2_3'),   # 1FB4C
+    ('TL', 'right_2_3'),         # 1FB4D
+    ('top_mid', 'right_1_3'),   # 1FB4E
+    ('TL', 'right_1_3'),         # 1FB4F
+    ('top_mid', 'BR'),           # 1FB50
+    ('left_2_3', 'right_1_3'),  # 1FB51
 ]
 
 # Starting codepoint
@@ -80,7 +72,7 @@ def point_side_of_line(px, py, x1, y1, x2, y2):
     return (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
 
 
-def generate_wedge_bitmap(width, height, point_a, point_b, fill_side):
+def generate_wedge_bitmap(width, height, point_a, point_b):
     """
     Generate a bitmap for a wedge shape.
 
@@ -89,7 +81,6 @@ def generate_wedge_bitmap(width, height, point_a, point_b, fill_side):
         height: Cell height in pixels
         point_a: Name of first point defining the diagonal
         point_b: Name of second point defining the diagonal
-        fill_side: 'below' or 'above' - which side of the line to fill
 
     Returns:
         List of integers, one per row, representing the bitmap
@@ -115,13 +106,8 @@ def generate_wedge_bitmap(width, height, point_a, point_b, fill_side):
 
             side = point_side_of_line(px, py, x1, y1, x2, y2)
 
-            # Determine if pixel should be filled
-            if fill_side == 'below':
-                filled = side <= 0
-            else:  # 'above'
-                filled = side >= 0
-
-            if filled:
+            # Fill where cross-product is non-negative
+            if side >= 0:
                 row_bits |= (1 << (width - 1 - col))
 
         bitmap.append(row_bits)
@@ -151,7 +137,7 @@ def bitmap_to_hex(bitmap, width):
     return hex_lines
 
 
-def generate_bdf_glyph(codepoint, bitmap, width, height, name=None):
+def generate_bdf_glyph(codepoint, bitmap, width, height, descent=0, name=None):
     """Generate BDF glyph entry."""
     if name is None:
         name = f"U{codepoint:04X}"
@@ -163,7 +149,7 @@ def generate_bdf_glyph(codepoint, bitmap, width, height, name=None):
         f"ENCODING {codepoint}",
         f"SWIDTH {width * 48} 0",
         f"DWIDTH {width} 0",
-        f"BBX {width} {height} 0 0",
+        f"BBX {width} {height} 0 {-descent}",
         "BITMAP",
     ]
     lines.extend(hex_lines)
@@ -172,35 +158,35 @@ def generate_bdf_glyph(codepoint, bitmap, width, height, name=None):
     return '\n'.join(lines)
 
 
-def generate_all_wedges(width, height):
+def generate_all_wedges(width, height, descent=0):
     """Generate all 44 wedge characters (22 base + 22 inverted)."""
     glyphs = []
     codepoint = BASE_CODEPOINT
 
     # Generate 22 base wedges
-    for point_a, point_b, fill_side in WEDGE_DEFINITIONS:
-        bitmap = generate_wedge_bitmap(width, height, point_a, point_b, fill_side)
-        glyph = generate_bdf_glyph(codepoint, bitmap, width, height)
+    for point_a, point_b in WEDGE_DEFINITIONS:
+        bitmap = generate_wedge_bitmap(width, height, point_a, point_b)
+        glyph = generate_bdf_glyph(codepoint, bitmap, width, height, descent)
         glyphs.append(glyph)
         codepoint += 1
 
     # Generate 22 inverted wedges
-    for point_a, point_b, fill_side in WEDGE_DEFINITIONS:
-        bitmap = generate_wedge_bitmap(width, height, point_a, point_b, fill_side)
+    for point_a, point_b in WEDGE_DEFINITIONS:
+        bitmap = generate_wedge_bitmap(width, height, point_a, point_b)
         inverted = invert_bitmap(bitmap, width)
-        glyph = generate_bdf_glyph(codepoint, inverted, width, height)
+        glyph = generate_bdf_glyph(codepoint, inverted, width, height, descent)
         glyphs.append(glyph)
         codepoint += 1
 
     return glyphs
 
 
-def generate_bdf_file(width, height, font_name=None):
+def generate_bdf_file(width, height, descent=0, font_name=None):
     """Generate complete BDF file content."""
     if font_name is None:
         font_name = f"LegacyWedges-{width}x{height}"
 
-    glyphs = generate_all_wedges(width, height)
+    glyphs = generate_all_wedges(width, height, descent)
 
     header = f"""STARTFONT 2.1
 FONT -{font_name}-Medium-R-Normal--{height}-{height*10}-75-75-C-{width*10}-ISO10646-1
@@ -218,41 +204,119 @@ CHARS {len(glyphs)}
     return header + '\n'.join(glyphs) + footer
 
 
-def preview_wedge(width, height, point_a, point_b, fill_side):
+def preview_wedge(width, height, point_a, point_b):
     """Print ASCII preview of a wedge."""
-    bitmap = generate_wedge_bitmap(width, height, point_a, point_b, fill_side)
-    print(f"\n{point_a} -> {point_b} ({fill_side}):")
+    bitmap = generate_wedge_bitmap(width, height, point_a, point_b)
+    print(f"\n{point_a} -> {point_b}:")
     for row in bitmap:
         bits = format(row, f'0{width}b')
         print(bits.replace('0', '·').replace('1', '█'))
 
 
+def get_font_metrics(bdf_path):
+    """Extract width, height, and descent from a BDF font file."""
+    with open(bdf_path, 'r') as f:
+        content = f.read()
+
+    match = re.search(r'FONTBOUNDINGBOX\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)', content)
+    if not match:
+        raise ValueError("Could not find FONTBOUNDINGBOX in font")
+
+    width = int(match.group(1))
+    height = int(match.group(2))
+    y_offset = int(match.group(4))
+    descent = -y_offset
+
+    return width, height, descent
+
+
 def main():
     parser = argparse.ArgumentParser(description='Generate Legacy Computing wedge characters')
-    parser.add_argument('-W', '--width', type=int, default=10, help='Cell width in pixels')
-    parser.add_argument('-H', '--height', type=int, default=20, help='Cell height in pixels')
+    parser.add_argument('-W', '--width', type=int, help='Cell width in pixels')
+    parser.add_argument('-H', '--height', type=int, help='Cell height in pixels')
+    parser.add_argument('-d', '--descent', type=int, default=0, help='Font descent in pixels (e.g., 4 for 10x20)')
+    parser.add_argument('-f', '--font', type=str, help='Read metrics from existing BDF font')
     parser.add_argument('-o', '--output', type=str, help='Output BDF file path')
+    parser.add_argument('--add-to', nargs='+', metavar='FONT', help='Add/replace wedges in existing BDF font(s)')
+    parser.add_argument('--replace', action='store_true', help='Replace existing wedge characters (with --add-to)')
     parser.add_argument('--preview', action='store_true', help='Preview wedges in terminal')
     parser.add_argument('--preview-index', type=int, help='Preview specific wedge (0-21)')
 
     args = parser.parse_args()
 
-    if args.preview:
-        print(f"Previewing wedges at {args.width}x{args.height}:")
-        for i, (pa, pb, fs) in enumerate(WEDGE_DEFINITIONS):
-            if args.preview_index is None or args.preview_index == i:
-                print(f"\n[{i}] U+{BASE_CODEPOINT + i:04X}:", end='')
-                preview_wedge(args.width, args.height, pa, pb, fs)
+    # Handle --add-to mode
+    if args.add_to:
+        for font_path in args.add_to:
+            add_to_font(font_path, args.replace)
         return
 
-    bdf_content = generate_bdf_file(args.width, args.height)
+    # Get dimensions from font file or arguments
+    if args.font:
+        width, height, descent = get_font_metrics(args.font)
+        print(f"Read from {args.font}: {width}x{height}, descent={descent}", file=sys.stderr)
+    else:
+        width = args.width or 10
+        height = args.height or 20
+        descent = args.descent
+
+    if args.preview:
+        print(f"Previewing wedges at {width}x{height}:")
+        for i, (pa, pb) in enumerate(WEDGE_DEFINITIONS):
+            if args.preview_index is None or args.preview_index == i:
+                print(f"\n[{i}] U+{BASE_CODEPOINT + i:04X}:", end='')
+                preview_wedge(width, height, pa, pb)
+        return
+
+    bdf_content = generate_bdf_file(width, height, descent)
 
     if args.output:
         with open(args.output, 'w') as f:
             f.write(bdf_content)
-        print(f"Generated {args.output} ({args.width}x{args.height}, 44 glyphs)")
+        print(f"Generated {args.output} ({width}x{height}, 44 glyphs)")
     else:
         print(bdf_content)
+
+
+def add_to_font(bdf_path, replace=False):
+    """Add or replace wedge characters in an existing BDF font."""
+    width, height, descent = get_font_metrics(bdf_path)
+    print(f"{bdf_path}: {width}x{height}, descent={descent}")
+
+    with open(bdf_path, 'r') as f:
+        content = f.read()
+
+    # Check if wedges already exist
+    has_wedges = 'ENCODING 129852' in content
+
+    if has_wedges and not replace:
+        print("  Wedge characters already exist. Use --replace to replace them.")
+        return
+
+    if has_wedges:
+        # Remove existing wedge chars (U+1FB3C to U+1FB67 = 129852 to 129895)
+        for cp in range(129852, 129896):
+            pattern = rf'STARTCHAR [^\n]*\nENCODING {cp}\n.*?ENDCHAR\n'
+            content = re.sub(pattern, '', content, flags=re.DOTALL)
+        print("  Removed existing wedge characters")
+
+    # Generate new wedges with correct descent
+    glyphs = generate_all_wedges(width, height, descent)
+    wedge_content = '\n'.join(glyphs) + '\n'
+
+    # Insert before ENDFONT
+    content = content.replace('ENDFONT', wedge_content + 'ENDFONT')
+
+    # Update CHARS count if adding (not replacing)
+    if not has_wedges:
+        match = re.search(r'^CHARS\s+(\d+)', content, re.MULTILINE)
+        old_count = int(match.group(1))
+        content = re.sub(r'^CHARS\s+\d+', f'CHARS {old_count + 44}', content, flags=re.MULTILINE)
+
+    with open(bdf_path, 'w') as f:
+        f.write(content)
+
+    action = "Replaced" if has_wedges else "Added"
+    print(f"  {action} 44 wedge characters")
 
 
 if __name__ == '__main__':

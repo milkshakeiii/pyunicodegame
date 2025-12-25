@@ -94,13 +94,17 @@ def create_ttf_from_bdf(bdf_path, ttf_path, family_name=None):
     fb = FontBuilder(units_per_em, isTTF=True)
     fb.setupGlyphOrder(glyph_order)
 
+    # Get cell width from first glyph (all should be same for monospace)
+    first_glyph = next(iter(font_info['glyphs'].values()))
+    cell_width = first_glyph['width']
+
     pen_glyphs = {}
-    widths = {}
+    metrics = {}  # (advance_width, lsb) per glyph
 
     # Empty .notdef glyph
     pen = TTGlyphPen(None)
     pen_glyphs['.notdef'] = pen.glyph()
-    widths['.notdef'] = int(10 * scale)
+    metrics['.notdef'] = (int(cell_width * scale), 0)
 
     # Process each glyph
     count = 0
@@ -115,8 +119,13 @@ def create_ttf_from_bdf(bdf_path, ttf_path, family_name=None):
                 scale
             )
 
-        pen_glyphs[name] = pen.glyph()
-        widths[name] = int(g['width'] * scale)
+        glyph = pen.glyph()
+        glyph.recalcBounds(None)  # Calculate xMin/xMax
+        pen_glyphs[name] = glyph
+        advance = int(g['width'] * scale)
+        # LSB should be the glyph's xMin (0 for empty glyphs)
+        lsb = glyph.xMin if glyph.numberOfContours else 0
+        metrics[name] = (advance, lsb)
         count += 1
 
         if count % 1000 == 0:
@@ -127,7 +136,7 @@ def create_ttf_from_bdf(bdf_path, ttf_path, family_name=None):
     # Setup font tables
     fb.setupGlyf(pen_glyphs)
     fb.setupCharacterMap(cmap)
-    fb.setupHorizontalMetrics({n: (widths[n], 0) for n in glyph_order})
+    fb.setupHorizontalMetrics(metrics)
     fb.setupHorizontalHeader(ascent=ascent, descent=-descent)
 
     # Clean family name for PostScript (no spaces)
