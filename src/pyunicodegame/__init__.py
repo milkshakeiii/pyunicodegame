@@ -25,6 +25,7 @@ PUBLIC API:
     get_window(name) - Get a window by name ("root" is auto-created)
     remove_window(name) - Remove a window
     create_sprite(pattern, x, y, fg, ..., lerp_speed) - Create a sprite at position
+    create_sprite_from_image(path, width, height, ...) - Create pixel art sprite from image
     create_effect(pattern, x, y, vx, vy, ..., z_index) - Create an effect sprite with velocity/drag/fade
     create_emitter(x, y, chars, spawn_rate, ..., z_index) - Create a particle emitter
     create_animation(name, frame_indices, ...) - Create a named animation with offsets
@@ -57,7 +58,7 @@ __version__ = "1.0.0"
 __all__ = [
     "init", "run", "quit",
     "create_window", "get_window", "remove_window", "Window",
-    "Sprite", "SpriteFrame", "create_sprite",
+    "Sprite", "SpriteFrame", "create_sprite", "create_sprite_from_image",
     "EffectSprite", "create_effect",
     "EffectSpriteEmitter", "create_emitter",
     "Animation", "create_animation",
@@ -1674,6 +1675,148 @@ def create_sprite(
     sprite.x = x
     sprite.y = y
     sprite._teleport_pending = True  # Snap visual position on first update
+    sprite.z_index = z_index
+    sprite.blocks_light = blocks_light
+    sprite.emissive = emissive
+    sprite.lerp_speed = lerp_speed
+    return sprite
+
+
+def create_sprite_from_image(
+    image_path: str,
+    width: int,
+    height: int,
+    x: int = 0,
+    y: int = 0,
+    mode: str = "average",
+    transparency_threshold: int = 240,
+    z_index: int = 0,
+    blocks_light: bool = False,
+    emissive: bool = False,
+    lerp_speed: float = 0.0,
+) -> Sprite:
+    """
+    Create a pixel art sprite from an image file using half-block characters.
+
+    Uses the lower half block character (▄) with foreground and background colors
+    to display 2 vertical pixels per character cell, creating near-square pixels.
+
+    Args:
+        image_path: Path to the image file (PNG, JPG, etc.)
+        width: Target width in pixels
+        height: Target height in pixels (should be even for best results)
+        x: Sprite x position in cells (default 0)
+        y: Sprite y position in cells (default 0)
+        mode: Downscaling algorithm - "average" (box filter) or "mode" (most frequent color)
+        transparency_threshold: Alpha values below this are considered transparent (0-255)
+        z_index: Drawing order (higher = on top)
+        blocks_light: Whether sprite casts shadows
+        emissive: Whether sprite glows (bypasses bloom threshold)
+        lerp_speed: Movement interpolation speed in cells/sec (0 = instant)
+
+    Returns:
+        A Sprite object that can be added to a window
+
+    Example:
+        sprite = pyunicodegame.create_sprite_from_image(
+            "character.png",
+            width=32,
+            height=32,
+            mode="average",
+        )
+        window.add_sprite(sprite)
+
+    Note:
+        Requires Pillow (PIL). Install with: pip install Pillow
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        raise ImportError(
+            "Pillow is required for create_sprite_from_image. "
+            "Install with: pip install Pillow"
+        )
+
+    from collections import Counter
+
+    # Load and convert to RGBA
+    img = Image.open(image_path).convert("RGBA")
+    orig_width, orig_height = img.size
+
+    if mode == "average":
+        # BOX resampling does area averaging (box filter)
+        img = img.resize((width, height), Image.Resampling.BOX)
+    elif mode == "mode":
+        # For mode, we need to manually compute most frequent color per block
+        block_w = orig_width / width
+        block_h = orig_height / height
+        new_img = Image.new("RGBA", (width, height))
+
+        for out_y in range(height):
+            for out_x in range(width):
+                # Get all pixels in this block
+                x0 = int(out_x * block_w)
+                y0 = int(out_y * block_h)
+                x1 = int((out_x + 1) * block_w)
+                y1 = int((out_y + 1) * block_h)
+
+                pixels = []
+                for py in range(y0, min(y1, orig_height)):
+                    for px in range(x0, min(x1, orig_width)):
+                        pixels.append(img.getpixel((px, py)))
+
+                if pixels:
+                    # Find most frequent color
+                    most_common = Counter(pixels).most_common(1)[0][0]
+                    new_img.putpixel((out_x, out_y), most_common)
+
+        img = new_img
+    else:
+        raise ValueError(f"mode must be 'average' or 'mode', got '{mode}'")
+
+    # Build character and color grids
+    # Height in character rows = pixel height / 2 (ceiling division)
+    char_height = (height + 1) // 2
+
+    chars: List[List[str]] = []
+    fg_colors: List[List[Optional[Tuple[int, int, int]]]] = []
+    bg_colors: List[List[Optional[Tuple[int, int, int, int]]]] = []
+
+    for char_row in range(char_height):
+        chars.append([])
+        fg_colors.append([])
+        bg_colors.append([])
+
+        top_y = char_row * 2
+        bot_y = char_row * 2 + 1
+
+        for col in range(width):
+            top_pixel = img.getpixel((col, top_y))
+            # Handle odd height - bottom pixel may not exist
+            if bot_y < height:
+                bot_pixel = img.getpixel((col, bot_y))
+            else:
+                bot_pixel = (0, 0, 0, 0)
+
+            top_transparent = top_pixel[3] < transparency_threshold
+            bot_transparent = bot_pixel[3] < transparency_threshold
+
+            if top_transparent and bot_transparent:
+                # Both transparent - use space
+                chars[char_row].append(' ')
+                fg_colors[char_row].append(None)
+                bg_colors[char_row].append(None)
+            else:
+                # Use lower half block: fg = bottom pixel, bg = top pixel
+                chars[char_row].append('\u2584')  # ▄
+                fg_colors[char_row].append((bot_pixel[0], bot_pixel[1], bot_pixel[2]))
+                bg_colors[char_row].append((top_pixel[0], top_pixel[1], top_pixel[2], 255))
+
+    frame = SpriteFrame(chars, fg_colors, bg_colors)
+    sprite = Sprite([frame], (255, 255, 255), None)
+    sprite.x = x
+    sprite.y = y
+    sprite._teleport_pending = True
     sprite.z_index = z_index
     sprite.blocks_light = blocks_light
     sprite.emissive = emissive
