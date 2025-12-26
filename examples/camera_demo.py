@@ -2,8 +2,7 @@
 """
 Demo of the camera system with parallax scrolling.
 
-Arrow keys to move camera, P to toggle perspective/orthographic mode.
-Shows multiple windows at different depths creating a parallax effect.
+Arrow keys to move camera. Windows at different depths create parallax effect.
 """
 
 import random
@@ -168,7 +167,7 @@ def main():
     # --- Camera setup ---
 
     start_x = (scene_width - 80) // 2 * 10
-    pyunicodegame.set_camera(x=start_x, y=0, mode="perspective", depth_scale=0.1)
+    pyunicodegame.set_camera(x=start_x, y=0, depth_scale=0.1)
     camera_speed = 80
 
     def update(dt):
@@ -179,18 +178,15 @@ def main():
             pyunicodegame.move_camera(dx, dy)
 
     def on_key(key):
-        if key == pygame.K_p:
-            _, _, mode, _ = pyunicodegame.get_camera()
-            pyunicodegame.set_camera(mode="orthographic" if mode == "perspective" else "perspective")
-        elif key == pygame.K_q:
+        if key == pygame.K_q:
             pyunicodegame.quit()
 
     def render():
-        cx, cy, mode, _ = pyunicodegame.get_camera()
+        cx, cy, _ = pyunicodegame.get_camera()
 
         ui.put_string(2, 0, "CAMERA DEMO - Parallax Scrolling", (200, 200, 255))
-        ui.put_string(2, 1, "Arrow keys: Move   P: Toggle mode   Q: Quit", (150, 150, 150))
-        ui.put_string(2, 2, f"Cam: ({cx:.0f},{cy:.0f}) {mode.upper()}", (100, 100, 100))
+        ui.put_string(2, 1, "Arrow keys: Move   Q: Quit", (150, 150, 150))
+        ui.put_string(2, 2, f"Cam: ({cx:.0f},{cy:.0f})", (100, 100, 100))
 
         fps = pyunicodegame._clock.get_fps()
         ui.put_string(80 - 8, 0, f"FPS:{fps:.0f}", (100, 100, 100))

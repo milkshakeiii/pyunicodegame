@@ -85,21 +85,22 @@ orb = pyunicodegame.create_sprite("O", fg=(100, 100, 200), emissive=True)
 ```
 
 ### Parallax Camera
-Multi-layer scrolling with depth-based parallax effects in perspective mode. Orthographic mode for plain scrollable windows.
+Multi-layer scrolling with depth-based parallax. `depth=0` moves 1:1 with camera, higher values move slower.
 
 ![Camera Demo](assets/camera.gif)
 
 ```python
-# Background layer - slow parallax
+# Background layer - slow parallax (depth=4.0 moves slower)
 mountains = pyunicodegame.create_window("mountains", 0, 0, 240, 25, z_index=1, depth=4.0)
 
-# Foreground layer - moves with camera
+# Foreground layer - moves 1:1 with camera (depth=0)
 foreground = pyunicodegame.create_window("fg", 0, 0, 240, 25, z_index=10, depth=0.0)
 
-# UI layer - fixed, ignores camera
+# UI layer - fixed, ignores camera entirely
 ui = pyunicodegame.create_window("ui", 0, 0, 80, 25, z_index=100, fixed=True)
 
-pyunicodegame.set_camera(x=400, y=0, mode="perspective", depth_scale=0.1)
+# Move camera (each layer scrolls at its own speed)
+pyunicodegame.move_camera(dx=5, dy=0)
 ```
 
 ## Installation
