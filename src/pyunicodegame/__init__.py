@@ -39,6 +39,7 @@ PUBLIC API:
     Window.depth - Parallax depth (0 = at camera, higher = farther)
     Window.fixed - If True, window ignores camera (for UI layers)
     Window.cell_size - Cell dimensions in pixels (width, height)
+    Window.string_width(text) - Get width of string in cells (handles wide chars)
     Sprite.lerp_speed - Interpolation speed in cells/sec (0 = instant)
     Sprite.move_to(x, y, teleport=False) - Move sprite, teleport=True snaps instantly
     Sprite.emissive / EffectSprite.emissive - Mark sprite to always glow (bypasses threshold)
@@ -73,6 +74,9 @@ AVAILABLE_FONTS = {
     "6x13": "6x13.bdf",
     "9x18": "9x18.bdf",
     "10x20": "10x20.bdf",
+    # Unifont: 8x16 duospace with full Unicode coverage (115K+ chars)
+    # Uses two OTF files internally (Plane 0 + Upper planes)
+    "unifont": ("unifont.otf", "unifont_upper.otf"),
 }
 DEFAULT_FONT = "10x20"
 
@@ -95,24 +99,87 @@ _camera_depth_scale: float = 0.1  # How much depth affects parallax
 
 
 def _get_font_dimensions(font: pygame.freetype.Font) -> Tuple[int, int]:
-    """Get cell dimensions by rendering a test character."""
-    surf, _ = font.render("\u2588", (255, 255, 255))  # Full block character
-    return surf.get_width(), surf.get_height()
+    """Get base cell dimensions using font metrics (no rendering needed).
+
+    For uniform-width fonts, all characters have the same width.
+    For duospace fonts (like Unifont), this returns the narrow (half-width)
+    dimension - wide characters will naturally render at ~2x this width.
+    """
+    # Use get_metrics for the advance width (no surface creation needed)
+    metrics = font.get_metrics("M")  # Narrow reference character
+    if metrics and metrics[0]:
+        width = int(metrics[0][4])  # advance is the 5th element
+    else:
+        # Fallback to rendering if metrics unavailable
+        surf, _ = font.render("M", (255, 255, 255))
+        width = surf.get_width()
+
+    # Height from font's sized height (ascender + descender)
+    height = font.get_sized_height()
+
+    return width, height
 
 
-def _load_font(font_name: str) -> pygame.freetype.Font:
-    """Load a font by name, caching for reuse."""
+def _get_font_for_char(font_data, char: str) -> pygame.freetype.Font:
+    """Return the appropriate font for a character.
+
+    For fonts with fallback (stored as tuple), routes to the correct font
+    based on codepoint. Plane 0 (BMP) uses the first font, upper planes
+    use the second font.
+    """
+    if isinstance(font_data, tuple):
+        plane0_font, upper_font = font_data
+        codepoint = ord(char)
+        if codepoint > 0xFFFF:
+            return upper_font
+        return plane0_font
+    return font_data
+
+
+def _load_font(font_name: str):
+    """Load a font by name, caching for reuse.
+
+    Returns a single Font or tuple of (plane0_font, upper_font) for fonts
+    with fallback support (like unifont).
+    """
     if font_name in _fonts:
         return _fonts[font_name]
 
     if font_name not in AVAILABLE_FONTS:
         raise ValueError(f"Unknown font: {font_name}. Available: {list(AVAILABLE_FONTS.keys())}")
 
-    font_path = os.path.join(FONT_DIR, AVAILABLE_FONTS[font_name])
-    font = pygame.freetype.Font(font_path)
-    _fonts[font_name] = font
-    _font_dimensions[font_name] = _get_font_dimensions(font)
-    return font
+    font_entry = AVAILABLE_FONTS[font_name]
+
+    if isinstance(font_entry, tuple):
+        # Font with fallback - load both files
+        plane0_path = os.path.join(FONT_DIR, font_entry[0])
+        upper_path = os.path.join(FONT_DIR, font_entry[1])
+        plane0_font = pygame.freetype.Font(plane0_path)
+        upper_font = pygame.freetype.Font(upper_path)
+        # OTF fonts need explicit size; BDF fonts have size pre-set.
+        # For pixel fonts like Unifont, derive native size from design height.
+        # Assumes 4:1 ratio (design units to pixels) which is common for pixel fonts.
+        # Also enable padding so glyphs render with consistent vertical positioning.
+        for f in (plane0_font, upper_font):
+            if f.size == 0 and f.height > 0:
+                f.size = f.height / 4
+                f.pad = True
+        font_data = (plane0_font, upper_font)
+        _fonts[font_name] = font_data
+        # Use plane0 font for dimensions (they should be the same)
+        _font_dimensions[font_name] = _get_font_dimensions(plane0_font)
+        return font_data
+    else:
+        # Single font file
+        font_path = os.path.join(FONT_DIR, font_entry)
+        font = pygame.freetype.Font(font_path)
+        # OTF fonts need explicit size (assumes 4:1 design units to pixels)
+        if font.size == 0 and font.height > 0:
+            font.size = font.height / 4
+            font.pad = True
+        _fonts[font_name] = font
+        _font_dimensions[font_name] = _get_font_dimensions(font)
+        return font
 
 
 def _toggle_fullscreen() -> None:
@@ -219,6 +286,34 @@ class Window:
         """Cell dimensions in pixels (width, height)."""
         return (self._cell_width, self._cell_height)
 
+    def string_width(self, text: str) -> int:
+        """
+        Return the width of a string in cell units.
+
+        For duospace fonts, wide characters (CJK, etc.) count as 2 cells.
+        Useful for centering text or calculating layout.
+
+        Args:
+            text: The string to measure
+
+        Returns:
+            Width in cells
+
+        Example:
+            width = window.string_width("Hello世界")  # Returns 9 for duospace
+        """
+        total_cells = 0
+        for char in text:
+            font = _get_font_for_char(self._font, char)
+            metrics = font.get_metrics(char)
+            if metrics and metrics[0]:
+                char_advance = metrics[0][4]
+                cells = round(char_advance / self._cell_width)
+                total_cells += max(1, cells)
+            else:
+                total_cells += 1
+        return total_cells
+
     def put(
         self,
         x: int,
@@ -248,13 +343,14 @@ class Window:
             rect = pygame.Rect(px, py, self._cell_width, self._cell_height)
             self.surface.fill((*bg, 255), rect)
 
-        # Render character
+        # Render character (select correct font for this char)
+        font = _get_font_for_char(self._font, char)
         if self.scale != 1.0:
             # Render at native size then scale
-            surf, _ = self._font.render(char, fg)
+            surf, _ = font.render(char, fg)
             surf = pygame.transform.scale(surf, (self._cell_width, self._cell_height))
         else:
-            surf, _ = self._font.render(char, fg)
+            surf, _ = font.render(char, fg)
 
         self.surface.blit(surf, (px, py))
 
@@ -269,6 +365,9 @@ class Window:
         """
         Draw a string starting at cell position (x, y).
 
+        For duospace fonts (like Unifont), wide characters (CJK, etc.)
+        advance the cursor by 2 cells instead of 1.
+
         Args:
             x: Starting cell column
             y: Cell row
@@ -276,8 +375,45 @@ class Window:
             fg: Foreground color
             bg: Background color or None
         """
-        for i, char in enumerate(text):
-            self.put(x + i, y, char, fg, bg)
+        cursor = x
+        py = y * self._cell_height
+
+        for char in text:
+            # Get correct font for this character
+            font = _get_font_for_char(self._font, char)
+
+            # Get actual character width from font metrics
+            metrics = font.get_metrics(char)
+            if metrics and metrics[0]:
+                char_advance = metrics[0][4]  # advance is 5th element
+            else:
+                char_advance = self._cell_width
+
+            px = cursor * self._cell_width
+
+            # Bounds check
+            if cursor >= 0 and cursor < self.width and y >= 0 and y < self.height:
+                # Draw background if specified
+                if bg is not None:
+                    # Background fills the character's actual width
+                    char_width_scaled = int(char_advance * self.scale) if self.scale != 1.0 else int(char_advance)
+                    rect = pygame.Rect(px, py, char_width_scaled, self._cell_height)
+                    self.surface.fill((*bg, 255), rect)
+
+                # Render character
+                if self.scale != 1.0:
+                    surf, _ = font.render(char, fg)
+                    scaled_w = int(char_advance * self.scale)
+                    surf = pygame.transform.scale(surf, (scaled_w, self._cell_height))
+                else:
+                    surf, _ = font.render(char, fg)
+
+                self.surface.blit(surf, (px, py))
+
+            # Advance cursor by character width in cell units
+            # (round to nearest cell for duospace: 8px = 1 cell, 16px = 2 cells)
+            cells_advance = round(char_advance / self._cell_width)
+            cursor += max(1, cells_advance)
 
     def _put_at_pixel(
         self,
@@ -304,12 +440,13 @@ class Window:
             bg_with_alpha = (bg[0], bg[1], bg[2], int(bg[3] * alpha / 255) if len(bg) > 3 else alpha)
             self.surface.fill(bg_with_alpha, rect)
 
-        # Render character
+        # Render character (select correct font for this char)
+        font = _get_font_for_char(self._font, char)
         if self.scale != 1.0:
-            surf, _ = self._font.render(char, fg)
+            surf, _ = font.render(char, fg)
             surf = pygame.transform.scale(surf, (self._cell_width, self._cell_height))
         else:
-            surf, _ = self._font.render(char, fg)
+            surf, _ = font.render(char, fg)
 
         # Apply alpha to the character surface
         if alpha < 255:
@@ -2111,7 +2248,8 @@ def init(
         width: Grid width in unicode cells (default 80)
         height: Grid height in unicode cells (default 25)
         bg: Root window background color (R, G, B, A), default transparent
-        font_name: Font for the root window - "5x8", "6x13", "9x18", or "10x20" (default).
+        font_name: Font for the root window - "5x8", "6x13", "9x18", "10x20" (default),
+            or "unifontex" (8x16, duospace with full Unicode/CJK support).
             Also determines the base cell size and pygame window dimensions.
 
     Returns:
