@@ -26,6 +26,11 @@ This library is designed to be easily understood by LLMs when imported in other 
 
 ## Project Structure
 
-- `src/pyunicodegame/__init__.py` - Public API (main file LLMs read)
-- `src/pyunicodegame/fonts/10x20.bdf` - Bundled BDF font (10x20 pixels per cell)
-- `examples/demo.py` - Usage example
+- `src/pyunicodegame/__init__.py` - Public API, factory functions, core loop (main file LLMs read)
+- `src/pyunicodegame/_window.py` - Window class implementation
+- `src/pyunicodegame/_sprites.py` - Sprite, Animation, EffectSprite, EffectSpriteEmitter classes
+- `src/pyunicodegame/_lighting.py` - Light class and lighting helpers
+- `src/pyunicodegame/fonts/` - Bundled BDF/OTF fonts
+- `examples/` - Usage examples
+
+The PUBLIC API section in `__init__.py` lists key class methods so LLMs can discover them without reading the implementation files.
