@@ -48,7 +48,7 @@ PUBLIC API:
 """
 
 import os
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import pygame
 import pygame.freetype
@@ -83,16 +83,17 @@ AVAILABLE_FONTS = {
 DEFAULT_FONT = "10x20"
 
 # Module state
-_fonts: Dict[str, pygame.freetype.Font] = {}
+FontData = Union[pygame.freetype.Font, Tuple[pygame.freetype.Font, pygame.freetype.Font]]
+_fonts: Dict[str, FontData] = {}
 _font_dimensions: Dict[str, Tuple[int, int]] = {}
 _root_cell_width: int = 0
 _root_cell_height: int = 0
 _running: bool = False
-_clock: pygame.time.Clock = None
+_clock: Optional[pygame.time.Clock] = None
 _windows: Dict[str, Window] = {}
 _fullscreen: bool = False
-_windowed_size: Tuple[int, int] = (0, 0)  # Original window size for restoring
-_render_surface: pygame.Surface = None  # Off-screen surface for fullscreen scaling
+_windowed_size: Tuple[int, int] = (0, 0)
+_render_surface: Optional[pygame.Surface] = None
 
 # Camera system
 _camera_x: float = 0.0  # Position in pixels
@@ -117,7 +118,7 @@ def _get_font_dimensions(font: pygame.freetype.Font) -> Tuple[int, int]:
         width = surf.get_width()
 
     # Height from font's sized height (ascender + descender)
-    height = font.get_sized_height()
+    height = int(font.get_sized_height())  # type: ignore[call-arg]
 
     return width, height
 
@@ -191,7 +192,7 @@ def _toggle_fullscreen() -> None:
     _fullscreen = not _fullscreen
 
     if _fullscreen:
-        # Save current window size
+        assert _render_surface is not None
         _windowed_size = _render_surface.get_size()
 
         # Get desktop resolution
@@ -264,13 +265,11 @@ def create_sprite(
     if min_indent == float('inf'):
         min_indent = 0
 
-    # Strip common indent and build char grid
-    chars = []
-    fg_colors = [] if char_colors else None
+    chars: List[List[str]] = []
+    fg_colors: Optional[List[List[Optional[Tuple[int, int, int]]]]] = [] if char_colors else None
 
     max_width = 0
     for line in lines:
-        # Remove common indent
         if len(line) >= min_indent:
             line = line[int(min_indent):]
         else:
@@ -280,8 +279,8 @@ def create_sprite(
         chars.append(row)
         max_width = max(max_width, len(row))
 
-        if char_colors:
-            color_row = []
+        if char_colors and fg_colors is not None:
+            color_row: List[Optional[Tuple[int, int, int]]] = []
             for c in row:
                 color_row.append(char_colors.get(c))
             fg_colors.append(color_row)
@@ -417,10 +416,9 @@ def create_sprite_from_image(
         bot_y = char_row * 2 + 1
 
         for col in range(width):
-            top_pixel = img.getpixel((col, top_y))
-            # Handle odd height - bottom pixel may not exist
+            top_pixel: Tuple[int, int, int, int] = img.getpixel((col, top_y))  # type: ignore[assignment]
             if bot_y < height:
-                bot_pixel = img.getpixel((col, bot_y))
+                bot_pixel: Tuple[int, int, int, int] = img.getpixel((col, bot_y))  # type: ignore[assignment]
             else:
                 bot_pixel = (0, 0, 0, 0)
 
@@ -428,13 +426,11 @@ def create_sprite_from_image(
             bot_transparent = bot_pixel[3] < transparency_threshold
 
             if top_transparent and bot_transparent:
-                # Both transparent - use space
                 chars[char_row].append(' ')
                 fg_colors[char_row].append(None)
                 bg_colors[char_row].append(None)
             else:
-                # Use lower half block: fg = bottom pixel, bg = top pixel
-                chars[char_row].append('\u2584')  # ▄
+                chars[char_row].append('\u2584')
                 fg_colors[char_row].append((bot_pixel[0], bot_pixel[1], bot_pixel[2]))
                 bg_colors[char_row].append((top_pixel[0], top_pixel[1], top_pixel[2], 255))
 
@@ -513,8 +509,8 @@ def create_effect(
     if min_indent == float('inf'):
         min_indent = 0
 
-    chars = []
-    fg_colors = [] if char_colors else None
+    chars: List[List[str]] = []
+    fg_colors: Optional[List[List[Optional[Tuple[int, int, int]]]]] = [] if char_colors else None
     max_width = 0
 
     for line in lines:
@@ -527,8 +523,8 @@ def create_effect(
         chars.append(row)
         max_width = max(max_width, len(row))
 
-        if char_colors:
-            color_row = []
+        if char_colors and fg_colors is not None:
+            color_row: List[Optional[Tuple[int, int, int]]] = []
             for c in row:
                 color_row.append(char_colors.get(c))
             fg_colors.append(color_row)
@@ -753,6 +749,7 @@ def init(
 
     pygame.init()
     pygame.freetype.init()
+    pygame.key.set_repeat(500, 50)
 
     # Load root font and get cell dimensions
     _load_font(font_name)
@@ -906,6 +903,9 @@ def run(
     """
     global _running, _fullscreen
 
+    assert _clock is not None, "Must call init() before run()"
+    assert _render_surface is not None, "Must call init() before run()"
+
     _running = True
     while _running:
         dt = _clock.tick(60) / 1000.0
@@ -1037,9 +1037,9 @@ def quit() -> None:
 
 
 def set_camera(
-    x: float = None,
-    y: float = None,
-    depth_scale: float = None,
+    x: Optional[float] = None,
+    y: Optional[float] = None,
+    depth_scale: Optional[float] = None,
 ) -> None:
     """
     Configure the global camera.
