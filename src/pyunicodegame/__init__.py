@@ -93,6 +93,7 @@ _clock: Optional[pygame.time.Clock] = None
 _windows: Dict[str, Window] = {}
 _fullscreen: bool = False
 _windowed_size: Tuple[int, int] = (0, 0)
+_desktop_size: Tuple[int, int] = (0, 0)
 _render_surface: Optional[pygame.Surface] = None
 
 # Camera system
@@ -195,9 +196,8 @@ def _toggle_fullscreen() -> None:
         assert _render_surface is not None
         _windowed_size = _render_surface.get_size()
 
-        # Get desktop resolution
-        info = pygame.display.Info()
-        screen_w, screen_h = info.current_w, info.current_h
+        # Use stored desktop resolution
+        screen_w, screen_h = _desktop_size
 
         # Switch to fullscreen
         pygame.display.set_mode((screen_w, screen_h), pygame.FULLSCREEN)
@@ -745,11 +745,15 @@ def init(
         root = pyunicodegame.init("My Game", width=80, height=30, bg=(20, 20, 30, 255))
         # root is now available, or use pyunicodegame.get_window("root")
     """
-    global _root_cell_width, _root_cell_height, _clock, _render_surface, _windowed_size
+    global _root_cell_width, _root_cell_height, _clock, _render_surface, _windowed_size, _desktop_size
 
     pygame.init()
     pygame.freetype.init()
     pygame.key.set_repeat(500, 50)
+
+    # Capture desktop resolution BEFORE creating any display
+    info = pygame.display.Info()
+    _desktop_size = (info.current_w, info.current_h)
 
     # Load root font and get cell dimensions
     _load_font(font_name)
