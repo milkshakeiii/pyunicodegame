@@ -6,6 +6,8 @@ import math
 import random
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
+import pygame
+
 if TYPE_CHECKING:
     from . import Window
 
@@ -36,6 +38,181 @@ class SpriteFrame:
         self.bg_colors = bg_colors
         self.height = len(chars)
         self.width = len(chars[0]) if chars else 0
+
+
+class PixelFrame:
+    """
+    A single frame storing an RGBA pygame Surface.
+
+    Used by PixelSprite for raw pixel art rendering at the window's
+    logical resolution. Dimensions must be exact multiples of the
+    window's cell size.
+    """
+
+    def __init__(
+        self,
+        surface: pygame.Surface,
+        cell_width: int,
+        cell_height: int,
+    ):
+        """
+        Create a pixel frame.
+
+        Args:
+            surface: RGBA surface containing the pixel art
+            cell_width: Window cell width in pixels (for validation)
+            cell_height: Window cell height in pixels (for validation)
+
+        Raises:
+            ValueError: If surface dimensions are not multiples of cell size
+        """
+        self.surface = surface
+        sw = surface.get_width()
+        sh = surface.get_height()
+
+        if sw % cell_width != 0:
+            raise ValueError(
+                f"Surface width {sw} must be a multiple of cell width {cell_width}"
+            )
+        if sh % cell_height != 0:
+            raise ValueError(
+                f"Surface height {sh} must be a multiple of cell height {cell_height}"
+            )
+
+        self.width_cells = sw // cell_width
+        self.height_cells = sh // cell_height
+
+
+class SpriteSheet:
+    """
+    Load an image and extract frames for PixelSprite animation.
+
+    Sprite sheets are grids of equal-sized frames. Each frame's dimensions
+    must be exact multiples of the window's cell size.
+
+    Attributes:
+        frame_count: Total number of frames in the sheet
+    """
+
+    def __init__(
+        self,
+        image_path: str,
+        frame_width: int,
+        frame_height: int,
+        cell_size: Tuple[int, int],
+        rows: int = 1,
+        cols: int = 1,
+        spacing: int = 0,
+        margin: int = 0,
+    ):
+        """
+        Create a sprite sheet from an image file.
+
+        Args:
+            image_path: Path to the sprite sheet image (PNG, JPG, etc.)
+            frame_width: Width of each frame in pixels
+            frame_height: Height of each frame in pixels
+            cell_size: Window cell dimensions (width, height) for validation
+            rows: Number of rows in the sprite sheet
+            cols: Number of columns in the sprite sheet
+            spacing: Pixels between frames
+            margin: Pixels around the edge of the sheet
+
+        Raises:
+            ValueError: If frame dimensions are not multiples of cell size
+        """
+        cell_width, cell_height = cell_size
+
+        if frame_width % cell_width != 0:
+            raise ValueError(
+                f"Frame width {frame_width} must be a multiple of cell width {cell_width}"
+            )
+        if frame_height % cell_height != 0:
+            raise ValueError(
+                f"Frame height {frame_height} must be a multiple of cell height {cell_height}"
+            )
+
+        self._image = pygame.image.load(image_path).convert_alpha()
+        self._frame_width = frame_width
+        self._frame_height = frame_height
+        self._cell_width = cell_width
+        self._cell_height = cell_height
+        self._rows = rows
+        self._cols = cols
+        self._spacing = spacing
+        self._margin = margin
+        self._frames: List[Optional[PixelFrame]] = [None] * (rows * cols)
+
+    @property
+    def frame_count(self) -> int:
+        """Total number of frames in the sheet."""
+        return self._rows * self._cols
+
+    def get_frame(self, index: int) -> PixelFrame:
+        """
+        Get a frame by its linear index.
+
+        Frames are indexed left-to-right, top-to-bottom.
+
+        Args:
+            index: Frame index (0 to frame_count-1)
+
+        Returns:
+            PixelFrame for the requested frame
+
+        Raises:
+            IndexError: If index is out of range
+        """
+        if index < 0 or index >= self.frame_count:
+            raise IndexError(f"Frame index {index} out of range (0-{self.frame_count - 1})")
+
+        # Return cached frame if available
+        if self._frames[index] is not None:
+            return self._frames[index]  # type: ignore[return-value]
+
+        # Calculate row and column
+        row = index // self._cols
+        col = index % self._cols
+
+        return self.get_frame_grid(row, col)
+
+    def get_frame_grid(self, row: int, col: int) -> PixelFrame:
+        """
+        Get a frame by its row and column position.
+
+        Args:
+            row: Row index (0-based, from top)
+            col: Column index (0-based, from left)
+
+        Returns:
+            PixelFrame for the requested frame
+
+        Raises:
+            IndexError: If row or column is out of range
+        """
+        if row < 0 or row >= self._rows:
+            raise IndexError(f"Row {row} out of range (0-{self._rows - 1})")
+        if col < 0 or col >= self._cols:
+            raise IndexError(f"Column {col} out of range (0-{self._cols - 1})")
+
+        index = row * self._cols + col
+
+        # Return cached frame if available
+        if self._frames[index] is not None:
+            return self._frames[index]  # type: ignore[return-value]
+
+        # Extract the frame from the sheet
+        x = self._margin + col * (self._frame_width + self._spacing)
+        y = self._margin + row * (self._frame_height + self._spacing)
+
+        surface = pygame.Surface(
+            (self._frame_width, self._frame_height), pygame.SRCALPHA
+        )
+        surface.blit(self._image, (0, 0), (x, y, self._frame_width, self._frame_height))
+
+        frame = PixelFrame(surface, self._cell_width, self._cell_height)
+        self._frames[index] = frame
+        return frame
 
 
 class Animation:
@@ -778,3 +955,375 @@ class EffectSpriteEmitter:
         """Move the emitter to a new position."""
         self.x = x
         self.y = y
+
+
+class PixelSprite:
+    """
+    A pixel art sprite rendered at the window's logical resolution.
+
+    Unlike Sprite (which uses unicode characters), PixelSprite blits raw
+    pixel art directly. Dimensions must be exact multiples of the cell size,
+    ensuring alignment with the character grid.
+
+    Supports the same animation system as Sprite via the Animation class.
+    """
+
+    def __init__(
+        self,
+        frames: List[PixelFrame],
+        origin: Tuple[int, int] = (0, 0),
+    ):
+        """
+        Create a pixel sprite.
+
+        Args:
+            frames: List of PixelFrame objects for animation
+            origin: Offset in cells for positioning (0,0 = top-left of sprite)
+        """
+        self.frames = frames
+        self.origin = origin
+        self.current_frame = 0
+        self.visible = True
+
+        # Logical position (changes instantly on move_to)
+        self.x = 0
+        self.y = 0
+
+        # Visual position (private, interpolates toward logical)
+        self._visual_x = 0.0  # In pixels
+        self._visual_y = 0.0
+        self._lerp_speed = 0.0  # Cells per second (0 = instant)
+        self._teleport_pending = False  # Flag to force snap on next update
+
+        # Animation system
+        self._animations: Dict[str, Animation] = {}
+        self._current_animation: Optional[str] = None
+        self._animation_frame_index: int = 0
+        self._animation_timer: float = 0.0
+        self._animation_finished: bool = False
+
+        # Animation offset interpolation in pixels (separate from movement)
+        self._target_offset_x: float = 0.0
+        self._target_offset_y: float = 0.0
+        self._current_offset_x: float = 0.0
+        self._current_offset_y: float = 0.0
+
+        # Bloom: if True, always contributes to bloom (bypasses threshold)
+        self.emissive = False
+
+        # Lighting: if True, this sprite blocks light (casts shadows)
+        self.blocks_light = False
+
+        # Drawing order within window (higher = on top)
+        self.z_index = 0
+
+    @property
+    def lerp_speed(self) -> float:
+        """Interpolation speed in cells per second (0 = instant snap)."""
+        return self._lerp_speed
+
+    @lerp_speed.setter
+    def lerp_speed(self, value: float) -> None:
+        self._lerp_speed = value
+
+    def move_to(self, x: int, y: int, teleport: bool = False) -> None:
+        """
+        Move the sprite to a new logical position.
+
+        Args:
+            x, y: Target position in cells
+            teleport: If True, snap visual position instantly (bypass interpolation)
+
+        The logical position always changes instantly. The visual position
+        will interpolate toward it based on lerp_speed, unless teleport=True.
+        """
+        self.x = x
+        self.y = y
+        if teleport:
+            self._teleport_pending = True
+
+    def add_animation(self, animation: Animation) -> None:
+        """
+        Register an animation with this sprite.
+
+        Args:
+            animation: Animation object to add
+        """
+        self._animations[animation.name] = animation
+
+    def play_animation(self, name: str, reset: bool = True) -> None:
+        """
+        Start playing a named animation.
+
+        Args:
+            name: Name of the animation to play
+            reset: If True, restart from frame 0; if False, continue from current frame
+
+        Raises:
+            KeyError: If no animation with that name exists
+        """
+        if name not in self._animations:
+            raise KeyError(f"No animation named '{name}'")
+
+        if reset or self._current_animation != name:
+            self._animation_frame_index = 0
+            self._animation_timer = 0.0
+            self._animation_finished = False
+
+        self._current_animation = name
+
+        # Set initial frame and offset
+        anim = self._animations[name]
+        self.current_frame = anim.frame_indices[0]
+        self._target_offset_x = anim.offsets[0][0]
+        self._target_offset_y = anim.offsets[0][1]
+
+    def stop_animation(self, reset_offset: bool = True) -> None:
+        """
+        Stop the current animation.
+
+        Args:
+            reset_offset: If True, interpolate offset back to (0, 0)
+        """
+        self._current_animation = None
+        self._animation_finished = False
+        if reset_offset:
+            self._target_offset_x = 0.0
+            self._target_offset_y = 0.0
+
+    def is_animation_playing(self, name: Optional[str] = None) -> bool:
+        """
+        Check if an animation is currently playing.
+
+        Args:
+            name: If specified, check if this specific animation is playing.
+                  If None, check if any animation is playing.
+
+        Returns:
+            True if the animation is playing
+        """
+        if name is None:
+            return self._current_animation is not None and not self._animation_finished
+        return self._current_animation == name and not self._animation_finished
+
+    def is_animation_finished(self) -> bool:
+        """
+        Check if a one-shot animation has completed.
+
+        Returns:
+            True if a non-looping animation has reached its last frame
+        """
+        return self._animation_finished
+
+    def update(self, dt: float, cell_width: int, cell_height: int) -> None:
+        """
+        Update the sprite's animation, offsets, and visual position.
+
+        Args:
+            dt: Delta time in seconds
+            cell_width: Width of a cell in pixels
+            cell_height: Height of a cell in pixels
+        """
+        # --- PHASE 1: Animation frame advancement ---
+        if self._current_animation and self._current_animation in self._animations:
+            anim = self._animations[self._current_animation]
+
+            if not self._animation_finished:
+                self._animation_timer += dt
+
+                # Advance frames based on timer
+                while self._animation_timer >= anim.frame_duration:
+                    self._animation_timer -= anim.frame_duration
+                    self._animation_frame_index += 1
+
+                    # Handle end of animation
+                    if self._animation_frame_index >= len(anim.frame_indices):
+                        if anim.loop:
+                            self._animation_frame_index = 0
+                        else:
+                            self._animation_frame_index = len(anim.frame_indices) - 1
+                            self._animation_finished = True
+                            break
+
+                # Update current frame from animation
+                frame_idx = anim.frame_indices[self._animation_frame_index]
+                self.current_frame = frame_idx
+
+                # Update target offset from animation
+                offset = anim.offsets[self._animation_frame_index]
+                self._target_offset_x = offset[0]
+                self._target_offset_y = offset[1]
+
+        # --- PHASE 2: Offset interpolation ---
+        anim = self._animations.get(self._current_animation) if self._current_animation else None
+        offset_speed = anim.offset_speed if anim else 0.0
+
+        if offset_speed <= 0:
+            # Instant offset
+            self._current_offset_x = self._target_offset_x
+            self._current_offset_y = self._target_offset_y
+        else:
+            # Smooth interpolation toward target offset
+            dx = self._target_offset_x - self._current_offset_x
+            dy = self._target_offset_y - self._current_offset_y
+            distance = math.sqrt(dx * dx + dy * dy)
+
+            if distance > 0.5:  # Small threshold
+                move_dist = min(offset_speed * dt, distance)
+                self._current_offset_x += (dx / distance) * move_dist
+                self._current_offset_y += (dy / distance) * move_dist
+            else:
+                self._current_offset_x = self._target_offset_x
+                self._current_offset_y = self._target_offset_y
+
+        # --- PHASE 3: Movement interpolation (existing logic) ---
+        target_px = self.x * cell_width
+        target_py = self.y * cell_height
+
+        if self._lerp_speed <= 0 or self._teleport_pending:
+            # Instant movement (snap)
+            self._visual_x = float(target_px)
+            self._visual_y = float(target_py)
+            self._teleport_pending = False
+        else:
+            dx = target_px - self._visual_x
+            dy = target_py - self._visual_y
+            distance = math.sqrt(dx * dx + dy * dy)
+
+            if distance > 0.5:  # Small threshold to avoid jitter
+                speed_px = self._lerp_speed * cell_width  # cells/sec -> pixels/sec
+                move_dist = min(speed_px * dt, distance)
+                self._visual_x += (dx / distance) * move_dist
+                self._visual_y += (dy / distance) * move_dist
+            else:
+                self._visual_x = float(target_px)
+                self._visual_y = float(target_py)
+
+    def draw(self, window: Window) -> None:
+        """Draw the sprite to a window at its visual position plus animation offset."""
+        if not self.frames:
+            return
+
+        frame = self.frames[self.current_frame]
+
+        # Calculate pixel position: visual position + animation offset - origin
+        px = (self._visual_x + self._current_offset_x) - self.origin[0] * window._cell_width
+        py = (self._visual_y + self._current_offset_y) - self.origin[1] * window._cell_height
+
+        # Blit the surface directly (1:1 pixel mapping)
+        window.surface.blit(frame.surface, (int(px), int(py)))
+
+
+class PixelEffectSprite:
+    """
+    A visual-only pixel sprite for effects (particles, sparks, explosions, etc.).
+
+    Unlike PixelSprite, PixelEffectSprite has no logical position - only visual.
+    It uses velocity-based movement with optional drag and fade.
+
+    Attributes:
+        x, y: Position in cells (float for smooth movement)
+        vx, vy: Velocity in cells per second
+        drag: Velocity decay per second (0.1 = decays to 10% after 1 sec, 1.0 = no drag)
+        fade_time: Seconds until fully transparent (0 = no fade)
+        duration: Seconds until death (0 = infinite, use fade_time to control lifetime)
+        alive: False when expired (will be auto-removed from window)
+    """
+
+    def __init__(
+        self,
+        frames: List[PixelFrame],
+        origin: Tuple[int, int] = (0, 0),
+    ):
+        """
+        Create a pixel effect sprite.
+
+        Args:
+            frames: List of PixelFrame objects
+            origin: Offset in cells for positioning
+        """
+        self.frames = frames
+        self.origin = origin
+        self.current_frame = 0
+        self.visible = True
+        self.alive = True
+
+        # Position in cells (float for smooth movement)
+        self.x = 0.0
+        self.y = 0.0
+
+        # Velocity in cells per second
+        self.vx = 0.0
+        self.vy = 0.0
+
+        # Drag: velocity multiplier per second (0.1 = decays to 10% after 1 sec)
+        self.drag = 1.0  # 1.0 = no drag
+
+        # Fade: seconds until fully transparent (0 = no fade)
+        self.fade_time = 0.0
+        self._age = 0.0
+        self._initial_alpha = 255
+
+        # Duration: seconds until death (0 = infinite, use fade_time)
+        self.duration = 0.0
+
+        # Bloom: if True, always contributes to bloom (bypasses threshold)
+        self.emissive = False
+
+        # Lighting: if True, this sprite blocks light (casts shadows)
+        self.blocks_light = False
+
+        # Drawing order within window (higher = on top)
+        self.z_index = 0
+
+    def update(self, dt: float, cell_width: int, cell_height: int) -> None:
+        """Update position, velocity, fade, and duration."""
+        if not self.alive:
+            return
+
+        # Track age
+        self._age += dt
+
+        # Apply velocity
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+
+        # Apply drag (frame-rate independent exponential decay)
+        if self.drag < 1.0 and self.drag > 0:
+            decay = self.drag ** dt
+            self.vx *= decay
+            self.vy *= decay
+
+        # Check duration (hard cutoff, no fade)
+        if self.duration > 0 and self._age >= self.duration:
+            self.alive = False
+            self.visible = False
+            return
+
+        # Check fade (soft cutoff with alpha transition)
+        if self.fade_time > 0 and self._age >= self.fade_time:
+            self.alive = False
+            self.visible = False
+
+    def draw(self, window: Window) -> None:
+        """Draw the effect sprite with current alpha."""
+        if not self.frames or not self.visible:
+            return
+
+        # Calculate current alpha based on fade progress
+        alpha = self._initial_alpha
+        if self.fade_time > 0:
+            fade_progress = min(1.0, self._age / self.fade_time)
+            alpha = int(self._initial_alpha * (1.0 - fade_progress))
+
+        frame = self.frames[self.current_frame]
+        px = self.x * window._cell_width - self.origin[0] * window._cell_width
+        py = self.y * window._cell_height - self.origin[1] * window._cell_height
+
+        # Create a copy of the surface to apply alpha
+        if alpha < 255:
+            surf = frame.surface.copy()
+            surf.set_alpha(alpha)
+            window.surface.blit(surf, (int(px), int(py)))
+        else:
+            window.surface.blit(frame.surface, (int(px), int(py)))

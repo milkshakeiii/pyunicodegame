@@ -10,7 +10,7 @@ import pygame
 import pygame.freetype
 
 if TYPE_CHECKING:
-    from ._sprites import EffectSpriteEmitter, Sprite
+    from ._sprites import EffectSpriteEmitter, PixelEffectSprite, PixelSprite, Sprite
 
 
 class Window:
@@ -56,7 +56,7 @@ class Window:
         self.depth = 0.0  # Parallax depth (0 = at camera plane)
         self.fixed = False  # If True, ignores camera (for UI)
         self._bg = bg if bg is not None else (0, 0, 0, 0)  # Default transparent
-        self._sprites: List[Union[Sprite, "EffectSpriteEmitter"]] = []
+        self._sprites: List[Union["Sprite", "PixelSprite", "PixelEffectSprite", "EffectSpriteEmitter"]] = []
         self._emitters: List["EffectSpriteEmitter"] = []
 
         # Bloom effect settings
@@ -466,13 +466,27 @@ class Window:
                 continue
             frame = sprite.frames[sprite.current_frame]
 
-            # Add all non-space cells of the sprite as blockers
-            for row_idx, row in enumerate(frame.chars):
-                for col_idx, char in enumerate(row):
-                    if char != ' ':
-                        cx = sx + col_idx - sprite.origin[0]
-                        cy = sy + row_idx - sprite.origin[1]
+            # Check if this is a PixelSprite/PixelEffectSprite (has surface) or
+            # unicode Sprite (has chars)
+            if hasattr(frame, 'surface'):
+                # PixelSprite: use bounding box based on cell dimensions
+                origin = getattr(sprite, 'origin', (0, 0))
+                width_cells = frame.width_cells
+                height_cells = frame.height_cells
+                for row_idx in range(height_cells):
+                    for col_idx in range(width_cells):
+                        cx = sx + col_idx - origin[0]
+                        cy = sy + row_idx - origin[1]
                         blocking.add((cx, cy))
+            elif hasattr(frame, 'chars'):
+                # Unicode Sprite: add all non-space cells as blockers
+                origin = getattr(sprite, 'origin', (0, 0))
+                for row_idx, row in enumerate(frame.chars):
+                    for col_idx, char in enumerate(row):
+                        if char != ' ':
+                            cx = sx + col_idx - origin[0]
+                            cy = sy + row_idx - origin[1]
+                            blocking.add((cx, cy))
 
         return blocking
 

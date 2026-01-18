@@ -24,15 +24,28 @@ PUBLIC API:
     create_window(name, x, y, width, height, ..., depth, fixed) - Create a named window
     get_window(name) - Get a window by name ("root" is auto-created)
     remove_window(name) - Remove a window
-    create_sprite(pattern, x, y, fg, ..., lerp_speed) - Create a sprite at position
-    create_sprite_from_image(path, width, height, ...) - Create pixel art sprite from image
+
+    # Unicode sprites (character-based)
+    create_sprite(pattern, x, y, fg, ..., lerp_speed) - Create a unicode sprite at position
+    create_unicode_halfblocks_from_image(path, width, height, ...) - Unicode sprite from image using half-blocks
+    create_sprite_from_image(...) - Alias for create_unicode_halfblocks_from_image (backward compat)
     create_effect(pattern, x, y, vx, vy, ..., z_index) - Create an effect sprite with velocity/drag/fade
     create_emitter(x, y, chars, spawn_rate, ..., z_index) - Create a particle emitter
+
+    # Pixel sprites (raw pixel art, grid-aligned)
+    create_sprite_sheet(path, frame_width, frame_height, rows, cols, ...) - Load sprite sheet image
+    create_pixel_sprite(source, frames, x, y, ...) - Create PixelSprite from sheet or image
+    create_pixel_sprite_from_image(path, x, y, ...) - Single-frame PixelSprite from image
+    create_pixel_effect(source, x, y, vx, vy, ...) - Create PixelEffectSprite with velocity/drag/fade
+
+    # Animation & lighting
     create_animation(name, frame_indices, ...) - Create a named animation with offsets
     create_light(x, y, radius, color, ...) - Create a light source with shadows
     set_camera(x, y, depth_scale) - Configure global camera for parallax
     get_camera() - Get camera state (x, y, depth_scale)
     move_camera(dx, dy) - Move camera by relative amount
+
+    # Window methods
     Window.set_bloom(enabled, threshold, ...) - Enable bloom post-processing on window
     Window.add_light(light) - Add light to window (auto-enables lighting)
     Window.set_lighting(enabled, ambient) - Configure lighting system
@@ -40,11 +53,13 @@ PUBLIC API:
     Window.fixed - If True, window ignores camera (for UI layers)
     Window.cell_size - Cell dimensions in pixels (width, height)
     Window.string_width(text) - Get width of string in cells (handles wide chars)
-    Sprite.lerp_speed - Interpolation speed in cells/sec (0 = instant)
-    Sprite.move_to(x, y, teleport=False) - Move sprite, teleport=True snaps instantly
-    Sprite.emissive / EffectSprite.emissive - Mark sprite to always glow (bypasses threshold)
-    Sprite.blocks_light / EffectSprite.blocks_light - Mark sprite to cast shadows
-    Sprite.z_index / EffectSprite.z_index - Drawing order within window (higher = on top)
+
+    # Sprite attributes (shared by Sprite, PixelSprite, EffectSprite, PixelEffectSprite)
+    *.lerp_speed - Interpolation speed in cells/sec (0 = instant)
+    *.move_to(x, y, teleport=False) - Move sprite, teleport=True snaps instantly
+    *.emissive - Mark sprite to always glow (bypasses bloom threshold)
+    *.blocks_light - Mark sprite to cast shadows
+    *.z_index - Drawing order within window (higher = on top)
 """
 
 import os
@@ -53,7 +68,17 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 import pygame
 import pygame.freetype
 
-from ._sprites import Animation, EffectSprite, EffectSpriteEmitter, Sprite, SpriteFrame
+from ._sprites import (
+    Animation,
+    EffectSprite,
+    EffectSpriteEmitter,
+    PixelEffectSprite,
+    PixelFrame,
+    PixelSprite,
+    Sprite,
+    SpriteFrame,
+    SpriteSheet,
+)
 from ._lighting import Light, apply_bloom, compute_visible_cells
 from ._window import Window
 
@@ -61,11 +86,21 @@ __version__ = "1.0.0"
 __all__ = [
     "init", "run", "quit",
     "create_window", "get_window", "remove_window", "Window",
-    "Sprite", "SpriteFrame", "create_sprite", "create_sprite_from_image",
+    # Unicode sprites
+    "Sprite", "SpriteFrame", "create_sprite",
+    "create_unicode_halfblocks_from_image", "create_sprite_from_image",
+    # Pixel sprites
+    "PixelSprite", "PixelFrame", "PixelEffectSprite", "SpriteSheet",
+    "create_sprite_sheet", "create_pixel_sprite", "create_pixel_sprite_from_image",
+    "create_pixel_effect",
+    # Effects
     "EffectSprite", "create_effect",
     "EffectSpriteEmitter", "create_emitter",
+    # Animation
     "Animation", "create_animation",
+    # Lighting
     "Light", "create_light",
+    # Camera
     "set_camera", "get_camera", "move_camera",
 ]
 
@@ -307,7 +342,7 @@ def create_sprite(
     return sprite
 
 
-def create_sprite_from_image(
+def create_unicode_halfblocks_from_image(
     image_path: str,
     width: int,
     height: int,
@@ -321,14 +356,16 @@ def create_sprite_from_image(
     lerp_speed: float = 0.0,
 ) -> Sprite:
     """
-    Create a pixel art sprite from an image file using half-block characters.
+    Create a unicode sprite from an image file using half-block characters.
 
     Uses the lower half block character (▄) with foreground and background colors
     to display 2 vertical pixels per character cell, creating near-square pixels.
+    This is a unicode rendering technique, distinct from PixelSprite which renders
+    raw pixel art.
 
     Args:
         image_path: Path to the image file (PNG, JPG, etc.)
-        width: Target width in pixels
+        width: Target width in pixels (number of character columns)
         height: Target height in pixels (should be even for best results)
         x: Sprite x position in cells (default 0)
         y: Sprite y position in cells (default 0)
@@ -340,10 +377,10 @@ def create_sprite_from_image(
         lerp_speed: Movement interpolation speed in cells/sec (0 = instant)
 
     Returns:
-        A Sprite object that can be added to a window
+        A Sprite object (unicode) that can be added to a window
 
     Example:
-        sprite = pyunicodegame.create_sprite_from_image(
+        sprite = pyunicodegame.create_unicode_halfblocks_from_image(
             "character.png",
             width=32,
             height=32,
@@ -444,6 +481,10 @@ def create_sprite_from_image(
     sprite.emissive = emissive
     sprite.lerp_speed = lerp_speed
     return sprite
+
+
+# Backward-compatibility alias (prefer create_unicode_halfblocks_from_image for clarity)
+create_sprite_from_image = create_unicode_halfblocks_from_image
 
 
 def create_effect(
@@ -712,6 +753,255 @@ def create_light(
         casts_shadows=casts_shadows,
         follow_sprite=follow_sprite,
     )
+
+
+def create_sprite_sheet(
+    image_path: str,
+    frame_width: int,
+    frame_height: int,
+    rows: int = 1,
+    cols: int = 1,
+    spacing: int = 0,
+    margin: int = 0,
+    window_name: str = "root",
+) -> SpriteSheet:
+    """
+    Create a sprite sheet from an image file.
+
+    Sprite sheets are grids of equal-sized frames. Each frame's dimensions
+    must be exact multiples of the window's cell size (e.g., 8x16 for unifont).
+
+    Args:
+        image_path: Path to the sprite sheet image (PNG, JPG, etc.)
+        frame_width: Width of each frame in source pixels
+        frame_height: Height of each frame in source pixels
+        rows: Number of rows in the sprite sheet (default 1)
+        cols: Number of columns in the sprite sheet (default 1)
+        spacing: Pixels between frames (default 0)
+        margin: Pixels around the edge of the sheet (default 0)
+        window_name: Window to get cell size from (default "root")
+
+    Returns:
+        SpriteSheet object for extracting frames
+
+    Raises:
+        ValueError: If frame dimensions are not multiples of cell size
+
+    Example:
+        # For an 8x16 cell window, frames must be multiples of 8x16
+        sheet = pyunicodegame.create_sprite_sheet(
+            "player_sheet.png",
+            frame_width=16,  # 2 cells wide
+            frame_height=32,  # 2 cells tall
+            rows=2, cols=4,
+        )
+        frame0 = sheet.get_frame(0)
+    """
+    window = _windows[window_name]
+    cell_size = window.cell_size
+    return SpriteSheet(
+        image_path=image_path,
+        frame_width=frame_width,
+        frame_height=frame_height,
+        cell_size=cell_size,
+        rows=rows,
+        cols=cols,
+        spacing=spacing,
+        margin=margin,
+    )
+
+
+def create_pixel_sprite(
+    source: Union[SpriteSheet, str],
+    frames: Optional[List[int]] = None,
+    x: int = 0,
+    y: int = 0,
+    z_index: int = 0,
+    blocks_light: bool = False,
+    emissive: bool = False,
+    lerp_speed: float = 0.0,
+    window_name: str = "root",
+) -> PixelSprite:
+    """
+    Create a PixelSprite from a sprite sheet or image file.
+
+    Pixel sprites are rendered at the window's logical resolution (not screen
+    pixels). They scale with the window and align to the character grid.
+
+    Args:
+        source: SpriteSheet object or path to an image file
+        frames: List of frame indices to use (default: all frames from sheet,
+                or [0] for single image)
+        x, y: Initial position in cells
+        z_index: Drawing order within window (higher = on top)
+        blocks_light: If True, sprite casts shadows in lighting system
+        emissive: If True, sprite glows in bloom effect (bypasses threshold)
+        lerp_speed: Interpolation speed in cells/sec (0 = instant snap)
+        window_name: Window to get cell size from (default "root")
+
+    Returns:
+        A new PixelSprite object
+
+    Raises:
+        ValueError: If image dimensions are not multiples of cell size
+
+    Example:
+        # From sprite sheet
+        sheet = pyunicodegame.create_sprite_sheet("player.png", 16, 32, rows=1, cols=4)
+        player = pyunicodegame.create_pixel_sprite(sheet, frames=[0, 1, 2, 3])
+
+        # From single image
+        enemy = pyunicodegame.create_pixel_sprite("enemy.png", x=5, y=10)
+    """
+    import pygame
+
+    window = _windows[window_name]
+    cell_width, cell_height = window.cell_size
+
+    if isinstance(source, SpriteSheet):
+        # Extract frames from sprite sheet
+        if frames is None:
+            frames = list(range(source.frame_count))
+        pixel_frames = [source.get_frame(i) for i in frames]
+    else:
+        # Load from image file
+        image = pygame.image.load(source).convert_alpha()
+        pixel_frames = [PixelFrame(image, cell_width, cell_height)]
+
+    sprite = PixelSprite(pixel_frames)
+    sprite.x = x
+    sprite.y = y
+    sprite._teleport_pending = True  # Snap visual position on first update
+    sprite.z_index = z_index
+    sprite.blocks_light = blocks_light
+    sprite.emissive = emissive
+    sprite.lerp_speed = lerp_speed
+    return sprite
+
+
+def create_pixel_sprite_from_image(
+    image_path: str,
+    x: int = 0,
+    y: int = 0,
+    z_index: int = 0,
+    blocks_light: bool = False,
+    emissive: bool = False,
+    lerp_speed: float = 0.0,
+    window_name: str = "root",
+) -> PixelSprite:
+    """
+    Create a single-frame PixelSprite from an image file.
+
+    Convenience function for static pixel sprites. The image dimensions
+    must be exact multiples of the window's cell size.
+
+    Args:
+        image_path: Path to the image file (PNG, JPG, etc.)
+        x, y: Initial position in cells
+        z_index: Drawing order within window (higher = on top)
+        blocks_light: If True, sprite casts shadows in lighting system
+        emissive: If True, sprite glows in bloom effect (bypasses threshold)
+        lerp_speed: Interpolation speed in cells/sec (0 = instant snap)
+        window_name: Window to get cell size from (default "root")
+
+    Returns:
+        A new PixelSprite object
+
+    Raises:
+        ValueError: If image dimensions are not multiples of cell size
+
+    Example:
+        # For an 8x16 cell window, image must be multiples of 8x16
+        enemy = pyunicodegame.create_pixel_sprite_from_image(
+            "enemy_16x32.png",  # 2x2 cells
+            x=10, y=5,
+        )
+        window.add_sprite(enemy)
+    """
+    return create_pixel_sprite(
+        source=image_path,
+        x=x,
+        y=y,
+        z_index=z_index,
+        blocks_light=blocks_light,
+        emissive=emissive,
+        lerp_speed=lerp_speed,
+        window_name=window_name,
+    )
+
+
+def create_pixel_effect(
+    source: Union[SpriteSheet, str, PixelFrame],
+    x: float,
+    y: float,
+    vx: float = 0.0,
+    vy: float = 0.0,
+    drag: float = 1.0,
+    fade_time: float = 0.0,
+    duration: float = 0.0,
+    z_index: int = 0,
+    blocks_light: bool = False,
+    emissive: bool = False,
+    frame_index: int = 0,
+    window_name: str = "root",
+) -> PixelEffectSprite:
+    """
+    Create a pixel effect sprite with velocity, drag, and fade.
+
+    Pixel effects are rendered at the window's logical resolution and
+    support physics-based movement like EffectSprite.
+
+    Args:
+        source: SpriteSheet, image path, or PixelFrame
+        x, y: Starting position in cells
+        vx, vy: Velocity in cells per second
+        drag: Velocity decay per second (0.1 = decays to 10%/sec, 1.0 = no drag)
+        fade_time: Seconds until fully transparent (0 = no fade)
+        duration: Seconds until death (0 = infinite, use fade_time)
+        z_index: Drawing order within window (higher = on top)
+        blocks_light: If True, sprite casts shadows in lighting system
+        emissive: If True, sprite glows in bloom effect (bypasses threshold)
+        frame_index: Which frame to use from sprite sheet (default 0)
+        window_name: Window to get cell size from (default "root")
+
+    Returns:
+        A PixelEffectSprite ready to add to a window
+
+    Example:
+        # Create a pixel explosion particle
+        sheet = pyunicodegame.create_sprite_sheet("particles.png", 8, 16, rows=1, cols=4)
+        particle = pyunicodegame.create_pixel_effect(
+            sheet, x=10, y=15, vx=5, vy=-8,
+            drag=0.3, fade_time=0.5, frame_index=0,
+        )
+        window.add_sprite(particle)
+    """
+    import pygame
+
+    window = _windows[window_name]
+    cell_width, cell_height = window.cell_size
+
+    if isinstance(source, PixelFrame):
+        pixel_frames = [source]
+    elif isinstance(source, SpriteSheet):
+        pixel_frames = [source.get_frame(frame_index)]
+    else:
+        # Load from image file
+        image = pygame.image.load(source).convert_alpha()
+        pixel_frames = [PixelFrame(image, cell_width, cell_height)]
+
+    effect = PixelEffectSprite(pixel_frames)
+    effect.x = x
+    effect.y = y
+    effect.vx = vx
+    effect.vy = vy
+    effect.drag = drag
+    effect.fade_time = fade_time
+    effect.duration = duration
+    effect.z_index = z_index
+    effect.blocks_light = blocks_light
+    effect.emissive = emissive
+    return effect
 
 
 def init(
