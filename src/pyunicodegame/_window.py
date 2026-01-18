@@ -420,6 +420,12 @@ class Window:
 
     def _check_lighting_dirty(self) -> bool:
         """Check if lighting needs recomputation."""
+        # Update light positions from follow_sprite FIRST (before checking)
+        for light in self._lights:
+            if light.follow_sprite:
+                light.x = light.follow_sprite.x
+                light.y = light.follow_sprite.y
+
         # Check light positions
         current_light_pos = {id(l): (l.x, l.y) for l in self._lights}
         if current_light_pos != self._cached_light_positions:
@@ -517,11 +523,6 @@ class Window:
 
         # Process each light
         for light in self._lights:
-            # Update position if following a sprite
-            if light.follow_sprite:
-                light.x = light.follow_sprite.x
-                light.y = light.follow_sprite.y
-
             origin_x, origin_y = int(light.x), int(light.y)
 
             # Get visible cells

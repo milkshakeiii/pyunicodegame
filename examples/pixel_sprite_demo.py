@@ -7,28 +7,15 @@ Demonstrates:
 - Grid alignment (pixel sprites align with unicode character grid)
 - Animation using the shared Animation class
 - PixelEffectSprite with velocity and fade
-- Mixing pixel sprites and unicode sprites in the same window
 - Lighting and bloom affecting pixel sprites
 
-Use arrow keys to move the pixel sprite. Press SPACE to emit particles.
+Use arrow keys to move the candle. Press SPACE to emit particles.
 """
+
+import random
 
 import pygame
 import pyunicodegame
-
-
-def create_test_image(width: int, height: int, color: tuple) -> pygame.Surface:
-    """Create a simple test image with a colored rectangle and border."""
-    surface = pygame.Surface((width, height), pygame.SRCALPHA)
-    surface.fill((0, 0, 0, 0))
-
-    # Draw filled rectangle with slight transparency
-    pygame.draw.rect(surface, (*color, 200), (1, 1, width - 2, height - 2))
-
-    # Draw border
-    pygame.draw.rect(surface, (255, 255, 255, 255), (0, 0, width, height), 1)
-
-    return surface
 
 
 def create_candle_frames(cell_w: int, cell_h: int) -> list:
@@ -71,15 +58,15 @@ def create_pillar_sprite(cell_w: int, cell_h: int) -> pygame.Surface:
     surf = pygame.Surface((cell_w, cell_h * 3), pygame.SRCALPHA)
     surf.fill((0, 0, 0, 0))
 
-    # Stone pillar with texture
-    pygame.draw.rect(surf, (80, 80, 90), (1, 0, cell_w - 2, cell_h * 3))
+    # Stone pillar with texture (brownish stone)
+    pygame.draw.rect(surf, (140, 120, 100), (1, 0, cell_w - 2, cell_h * 3))
 
     # Add some stone texture lines
     for y in range(0, cell_h * 3, cell_h // 2):
-        pygame.draw.line(surf, (60, 60, 70), (1, y), (cell_w - 2, y), 1)
+        pygame.draw.line(surf, (100, 85, 70), (1, y), (cell_w - 2, y), 1)
 
     # Highlight on left edge
-    pygame.draw.line(surf, (100, 100, 110), (1, 0), (1, cell_h * 3 - 1), 1)
+    pygame.draw.line(surf, (170, 150, 130), (1, 0), (1, cell_h * 3 - 1), 1)
 
     return surf
 
@@ -115,11 +102,9 @@ def main():
     ]
 
     candle = pyunicodegame.PixelSprite(candle_frames)
-    candle.x = 30
-    candle.y = 14
-    candle._teleport_pending = True
     candle.lerp_speed = 8
     candle.z_index = 10
+    candle.move_to(30, 14, teleport=True)
     root.add_sprite(candle)
 
     # Add flickering flame animation
@@ -136,10 +121,8 @@ def main():
     pillar_surf = create_pillar_sprite(cell_w, cell_h)
     pillar_frame = pyunicodegame.PixelFrame(pillar_surf, cell_w, cell_h)
     pillar = pyunicodegame.PixelSprite([pillar_frame])
-    pillar.x = 40
-    pillar.y = 12
-    pillar._teleport_pending = True
     pillar.blocks_light = True
+    pillar.move_to(40, 12, teleport=True)
     root.add_sprite(pillar)
 
     # Add lighting - candle emits light, pillar casts shadow
@@ -161,9 +144,6 @@ def main():
     particle_surf = create_particle_sprite(cell_w, cell_h, (255, 200, 50))
     particle_frame = pyunicodegame.PixelFrame(particle_surf, cell_w, cell_h)
 
-    def update(dt):
-        pass  # Animation runs automatically
-
     def on_key(key):
         if key == pygame.K_LEFT:
             candle.move_to(candle.x - 1, candle.y)
@@ -175,8 +155,6 @@ def main():
             candle.move_to(candle.x, candle.y + 1)
         elif key == pygame.K_SPACE:
             # Emit pixel effect particles from flame
-            import random
-
             for _ in range(5):
                 effect = pyunicodegame.PixelEffectSprite([particle_frame])
                 effect.x = float(candle.x)
@@ -200,13 +178,10 @@ def main():
         root.put_string(1, 1, "PixelSprite Demo", (200, 200, 200))
         root.put_string(1, 2, "Arrow keys: move, SPACE: particles, Q: quit", (120, 120, 120))
 
-        # Labels
-        root.put_string(9, 14, "Unicode", (150, 150, 150))
-
         # Grid reference
         root.put_string(1, 28, f"Cell size: {cell_w}x{cell_h}px", (80, 80, 80))
 
-    pyunicodegame.run(update=update, render=render, on_key=on_key)
+    pyunicodegame.run(render=render, on_key=on_key)
 
 
 if __name__ == "__main__":
