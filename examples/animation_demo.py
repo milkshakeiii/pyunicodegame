@@ -81,24 +81,14 @@ def main():
 
     root.add_sprite(player)
 
+    # Track position externally as float - move_to(int()) targets whole cells
+    character_x = 25.0
+    character_y = 12.0
+    move_speed_x = 6.0  # cells per second
+    move_speed_y = 3.0  # slower because cells are twice as tall as wide
+
     def on_key(key):
-        if key == pygame.K_LEFT:
-            player.move_to(player.x - 1, player.y)
-            if not player.is_animation_playing("jump"):
-                player.play_animation("walk", reset=False)
-        elif key == pygame.K_RIGHT:
-            player.move_to(player.x + 1, player.y)
-            if not player.is_animation_playing("jump"):
-                player.play_animation("walk", reset=False)
-        elif key == pygame.K_UP:
-            player.move_to(player.x, player.y - 1)
-            if not player.is_animation_playing("jump"):
-                player.play_animation("walk", reset=False)
-        elif key == pygame.K_DOWN:
-            player.move_to(player.x, player.y + 1)
-            if not player.is_animation_playing("jump"):
-                player.play_animation("walk", reset=False)
-        elif key == pygame.K_SPACE:
+        if key == pygame.K_SPACE:
             player.play_animation("jump")
         elif key == pygame.K_s:
             player.stop_animation()
@@ -106,9 +96,39 @@ def main():
             pyunicodegame.quit()
 
     def update(dt):
+        nonlocal character_x, character_y
+
         # Return to idle when jump finishes
         if player.is_animation_finished():
             player.play_animation("idle")
+
+        # Handle movement based on held keys
+        keys = pygame.key.get_pressed()
+        moving = False
+
+        if keys[pygame.K_LEFT]:
+            character_x -= move_speed_x * dt
+            moving = True
+        elif keys[pygame.K_RIGHT]:
+            character_x += move_speed_x * dt
+            moving = True
+        if keys[pygame.K_UP]:
+            character_y -= move_speed_y * dt
+            moving = True
+        elif keys[pygame.K_DOWN]:
+            character_y += move_speed_y * dt
+            moving = True
+
+        # Update sprite target position (int() so it targets whole cells)
+        player.move_to(int(character_x), int(character_y))
+
+        # Play walk animation while moving
+        if moving and not player.is_animation_playing("jump"):
+            if not player.is_animation_playing("walk"):
+                player.play_animation("walk", reset=False)
+        elif not moving and not player.is_animation_playing("jump"):
+            if not player.is_animation_playing("idle"):
+                player.play_animation("idle")
 
     def render():
         # Draw ground
