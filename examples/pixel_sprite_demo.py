@@ -31,43 +31,57 @@ def create_test_image(width: int, height: int, color: tuple) -> pygame.Surface:
     return surface
 
 
-def create_character_sprite(cell_w: int, cell_h: int) -> list:
-    """Create a simple character sprite (2x2 cells) with animation frames."""
+def create_candle_frames(cell_w: int, cell_h: int) -> list:
+    """Create candle sprite frames with flickering flame animation."""
     frames = []
+    body_top = cell_h // 2
 
-    # Frame 0: Standing
-    surf = pygame.Surface((cell_w * 2, cell_h * 2), pygame.SRCALPHA)
-    surf.fill((0, 0, 0, 0))
-    # Head
-    pygame.draw.circle(surf, (255, 220, 180), (cell_w, cell_h // 2 + 2), cell_w // 2)
-    # Body
-    pygame.draw.rect(surf, (0, 150, 255), (cell_w // 2, cell_h, cell_w, cell_h - 2))
-    # Eyes
-    pygame.draw.circle(surf, (0, 0, 0), (cell_w - 2, cell_h // 2), 1)
-    pygame.draw.circle(surf, (0, 0, 0), (cell_w + 2, cell_h // 2), 1)
-    frames.append(surf)
+    # Frame variations for flame flicker
+    flame_sizes = [
+        (2, 4, 6),   # normal
+        (2, 3, 5),   # smaller
+        (3, 5, 7),   # larger
+        (2, 4, 5),   # slightly smaller
+    ]
 
-    # Frame 1: Walk left
-    surf = pygame.Surface((cell_w * 2, cell_h * 2), pygame.SRCALPHA)
-    surf.fill((0, 0, 0, 0))
-    pygame.draw.circle(surf, (255, 220, 180), (cell_w, cell_h // 2 + 2), cell_w // 2)
-    pygame.draw.rect(surf, (0, 150, 255), (cell_w // 2, cell_h, cell_w, cell_h - 2))
-    # Eyes looking left
-    pygame.draw.circle(surf, (0, 0, 0), (cell_w - 3, cell_h // 2), 1)
-    pygame.draw.circle(surf, (0, 0, 0), (cell_w + 1, cell_h // 2), 1)
-    frames.append(surf)
+    for outer_w, inner_w, height in flame_sizes:
+        surf = pygame.Surface((cell_w, cell_h * 2), pygame.SRCALPHA)
+        surf.fill((0, 0, 0, 0))
 
-    # Frame 2: Walk right
-    surf = pygame.Surface((cell_w * 2, cell_h * 2), pygame.SRCALPHA)
-    surf.fill((0, 0, 0, 0))
-    pygame.draw.circle(surf, (255, 220, 180), (cell_w, cell_h // 2 + 2), cell_w // 2)
-    pygame.draw.rect(surf, (0, 150, 255), (cell_w // 2, cell_h, cell_w, cell_h - 2))
-    # Eyes looking right
-    pygame.draw.circle(surf, (0, 0, 0), (cell_w - 1, cell_h // 2), 1)
-    pygame.draw.circle(surf, (0, 0, 0), (cell_w + 3, cell_h // 2), 1)
-    frames.append(surf)
+        # Candle body (cream/white)
+        pygame.draw.rect(surf, (240, 230, 200), (cell_w // 4, body_top, cell_w // 2, cell_h + cell_h // 2))
+
+        # Wick
+        wick_x = cell_w // 2
+        pygame.draw.line(surf, (50, 40, 30), (wick_x, body_top - 2), (wick_x, body_top + 2), 1)
+
+        # Flame (varies per frame)
+        flame_cx = cell_w // 2
+        flame_cy = body_top - 4
+        pygame.draw.ellipse(surf, (255, 200, 50), (flame_cx - outer_w, flame_cy - height + 2, outer_w * 2, height))
+        pygame.draw.ellipse(surf, (255, 255, 150), (flame_cx - 1, flame_cy - inner_w + 1, 2, inner_w))
+
+        frames.append(surf)
 
     return frames
+
+
+def create_pillar_sprite(cell_w: int, cell_h: int) -> pygame.Surface:
+    """Create a stone pillar sprite (1x3 cells) that blocks light."""
+    surf = pygame.Surface((cell_w, cell_h * 3), pygame.SRCALPHA)
+    surf.fill((0, 0, 0, 0))
+
+    # Stone pillar with texture
+    pygame.draw.rect(surf, (80, 80, 90), (1, 0, cell_w - 2, cell_h * 3))
+
+    # Add some stone texture lines
+    for y in range(0, cell_h * 3, cell_h // 2):
+        pygame.draw.line(surf, (60, 60, 70), (1, y), (cell_w - 2, y), 1)
+
+    # Highlight on left edge
+    pygame.draw.line(surf, (100, 100, 110), (1, 0), (1, cell_h * 3 - 1), 1)
+
+    return surf
 
 
 def create_particle_sprite(cell_w: int, cell_h: int, color: tuple) -> pygame.Surface:
@@ -94,72 +108,51 @@ def main():
     cell_w, cell_h = root.cell_size
     print(f"Cell size: {cell_w}x{cell_h} pixels")
 
-    # Create a pixel sprite from programmatically generated frames
-    char_frames = create_character_sprite(cell_w, cell_h)
-    pixel_frames = [
-        pyunicodegame.PixelFrame(surf, cell_w, cell_h) for surf in char_frames
+    # Create candle with flickering flame animation
+    candle_surfs = create_candle_frames(cell_w, cell_h)
+    candle_frames = [
+        pyunicodegame.PixelFrame(surf, cell_w, cell_h) for surf in candle_surfs
     ]
 
-    player = pyunicodegame.PixelSprite(pixel_frames)
-    player.x = 30
-    player.y = 15
-    player._teleport_pending = True
-    player.lerp_speed = 10
-    player.z_index = 10
-    root.add_sprite(player)
+    candle = pyunicodegame.PixelSprite(candle_frames)
+    candle.x = 30
+    candle.y = 14
+    candle._teleport_pending = True
+    candle.lerp_speed = 8
+    candle.z_index = 10
+    root.add_sprite(candle)
 
-    # Add animations
-    idle_anim = pyunicodegame.create_animation("idle", [0], frame_duration=1.0)
-    walk_left = pyunicodegame.create_animation(
-        "walk_left",
-        [1, 0, 1, 0],
-        frame_duration=0.15,
-        offsets=[(0, 0), (0, -2), (0, 0), (0, -2)],
+    # Add flickering flame animation
+    flicker = pyunicodegame.create_animation(
+        "flicker",
+        [0, 1, 0, 2, 0, 3, 1, 2],
+        frame_duration=0.1,
+        loop=True,
     )
-    walk_right = pyunicodegame.create_animation(
-        "walk_right",
-        [2, 0, 2, 0],
-        frame_duration=0.15,
-        offsets=[(0, 0), (0, -2), (0, 0), (0, -2)],
-    )
+    candle.add_animation(flicker)
+    candle.play_animation("flicker")
 
-    player.add_animation(idle_anim)
-    player.add_animation(walk_left)
-    player.add_animation(walk_right)
-    player.play_animation("idle")
+    # Create a stone pillar that blocks light
+    pillar_surf = create_pillar_sprite(cell_w, cell_h)
+    pillar_frame = pyunicodegame.PixelFrame(pillar_surf, cell_w, cell_h)
+    pillar = pyunicodegame.PixelSprite([pillar_frame])
+    pillar.x = 40
+    pillar.y = 12
+    pillar._teleport_pending = True
+    pillar.blocks_light = True
+    root.add_sprite(pillar)
 
-    # Create a unicode sprite for comparison (shows grid alignment)
-    unicode_sprite = pyunicodegame.create_sprite(
-        """
-        ##
-        ##
-        """,
-        x=10,
-        y=15,
-        fg=(255, 100, 100),
-    )
-    root.add_sprite(unicode_sprite)
-
-    # Create a static pixel sprite
-    static_surf = create_test_image(cell_w * 2, cell_h * 2, (100, 255, 100))
-    static_frame = pyunicodegame.PixelFrame(static_surf, cell_w, cell_h)
-    static_sprite = pyunicodegame.PixelSprite([static_frame])
-    static_sprite.x = 50
-    static_sprite.y = 15
-    static_sprite._teleport_pending = True
-    root.add_sprite(static_sprite)
-
-    # Add lighting to see how it affects pixel sprites
-    root.set_lighting(ambient=(80, 80, 100))
-    light = pyunicodegame.create_light(
+    # Add lighting - candle emits light, pillar casts shadow
+    root.set_lighting(ambient=(30, 30, 50))
+    candle_light = pyunicodegame.create_light(
         x=30,
-        y=15,
-        radius=15,
-        color=(255, 200, 150),
+        y=14,
+        radius=25,
+        color=(255, 180, 80),
         intensity=1.0,
-        follow_sprite=player,  # Light follows player (via duck typing - uses .x/.y)
+        follow_sprite=candle,
     )
-    root.add_light(light)
+    root.add_light(candle_light)
 
     # Enable bloom
     root.set_bloom(enabled=True, threshold=200, intensity=1.5)
@@ -168,50 +161,30 @@ def main():
     particle_surf = create_particle_sprite(cell_w, cell_h, (255, 200, 50))
     particle_frame = pyunicodegame.PixelFrame(particle_surf, cell_w, cell_h)
 
-    moving_left = False
-    moving_right = False
-
     def update(dt):
-        nonlocal moving_left, moving_right
-
-        # Check if movement animation finished and return to idle
-        if not player.is_animation_playing():
-            if moving_left or moving_right:
-                moving_left = False
-                moving_right = False
-                player.play_animation("idle")
+        pass  # Animation runs automatically
 
     def on_key(key):
-        nonlocal moving_left, moving_right
-
         if key == pygame.K_LEFT:
-            player.move_to(player.x - 1, player.y)
-            if not moving_left:
-                player.play_animation("walk_left")
-                moving_left = True
-                moving_right = False
+            candle.move_to(candle.x - 1, candle.y)
         elif key == pygame.K_RIGHT:
-            player.move_to(player.x + 1, player.y)
-            if not moving_right:
-                player.play_animation("walk_right")
-                moving_right = True
-                moving_left = False
+            candle.move_to(candle.x + 1, candle.y)
         elif key == pygame.K_UP:
-            player.move_to(player.x, player.y - 1)
+            candle.move_to(candle.x, candle.y - 1)
         elif key == pygame.K_DOWN:
-            player.move_to(player.x, player.y + 1)
+            candle.move_to(candle.x, candle.y + 1)
         elif key == pygame.K_SPACE:
-            # Emit pixel effect particles
+            # Emit pixel effect particles from flame
             import random
 
             for _ in range(5):
                 effect = pyunicodegame.PixelEffectSprite([particle_frame])
-                effect.x = float(player.x) + 1
-                effect.y = float(player.y)
-                effect.vx = random.uniform(-5, 5)
-                effect.vy = random.uniform(-8, -2)
-                effect.drag = 0.3
-                effect.fade_time = 0.8
+                effect.x = float(candle.x)
+                effect.y = float(candle.y) - 0.5
+                effect.vx = random.uniform(-3, 3)
+                effect.vy = random.uniform(-6, -2)
+                effect.drag = 0.4
+                effect.fade_time = 0.6
                 effect.emissive = True
                 effect.z_index = 5
                 root.add_sprite(effect)
@@ -229,8 +202,6 @@ def main():
 
         # Labels
         root.put_string(9, 14, "Unicode", (150, 150, 150))
-        root.put_string(28, 14, "PixelSprite", (150, 150, 150))
-        root.put_string(49, 14, "Static", (150, 150, 150))
 
         # Grid reference
         root.put_string(1, 28, f"Cell size: {cell_w}x{cell_h}px", (80, 80, 80))

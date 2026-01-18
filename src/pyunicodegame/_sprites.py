@@ -260,34 +260,33 @@ class Animation:
         self.offset_speed = offset_speed
 
 
-class Sprite:
+class BaseAnimatedSprite:
     """
-    A unicode sprite - a block of characters that moves as a unit.
+    Base class for sprites with animation and lerp movement.
 
-    Sprites support smooth movement between cells via interpolation.
-    The logical position (x, y) changes instantly on move_to(), while
-    the visual position smoothly interpolates toward it.
+    Provides shared functionality for Sprite and PixelSprite:
+    - Position tracking (logical and visual)
+    - Smooth movement interpolation (lerp)
+    - Animation system (add, play, stop animations)
+    - Animation offset interpolation
+
+    Subclasses must implement draw() and can override __init__ to add
+    frame-type-specific attributes (e.g., fg/bg colors for unicode sprites).
     """
 
     def __init__(
         self,
-        frames: List[SpriteFrame],
-        fg: Tuple[int, int, int] = (255, 255, 255),
-        bg: Optional[Tuple[int, int, int, int]] = None,
+        frames: List,
         origin: Tuple[int, int] = (0, 0),
     ):
         """
-        Create a sprite.
+        Initialize base sprite state.
 
         Args:
-            frames: List of SpriteFrame objects for animation
-            fg: Default foreground color for all characters
-            bg: Default background color (None = transparent)
-            origin: Offset for positioning (0,0 = top-left of sprite)
+            frames: List of frame objects (SpriteFrame or PixelFrame)
+            origin: Offset in cells for positioning (0,0 = top-left of sprite)
         """
         self.frames = frames
-        self.fg = fg
-        self.bg = bg
         self.origin = origin
         self.current_frame = 0
         self.visible = True
@@ -348,104 +347,6 @@ class Sprite:
         self.y = y
         if teleport:
             self._teleport_pending = True
-
-    def add_frame(
-        self,
-        pattern: str,
-        fg: Optional[Tuple[int, int, int]] = None,
-        char_colors: Optional[Dict[str, Tuple[int, int, int]]] = None,
-    ) -> int:
-        """
-        Add an animation frame from a pattern string.
-
-        Args:
-            pattern: Multi-line string defining the frame shape.
-                     Spaces are transparent. Leading/trailing blank lines are trimmed.
-            fg: Default foreground color for this frame (overrides sprite default)
-            char_colors: Optional dict mapping characters to foreground colors
-
-        Returns:
-            The index of the newly added frame
-
-        Example:
-            player = pyunicodegame.create_sprite('''
-                O
-               /|\\
-               / \\
-            ''', fg=(0, 255, 0))
-
-            # Add walk frames with different colors
-            player.add_frame('''
-                O
-               /|\\
-               /
-            ''', fg=(0, 200, 0))
-            player.add_frame('''
-                O
-               /|\\
-                 \\
-            ''', fg=(0, 150, 0))
-        """
-        # Parse pattern (same logic as create_sprite)
-        lines = pattern.split('\n')
-
-        while lines and not lines[0].strip():
-            lines.pop(0)
-        while lines and not lines[-1].strip():
-            lines.pop()
-
-        if not lines:
-            frame = SpriteFrame([[]])
-            self.frames.append(frame)
-            return len(self.frames) - 1
-
-        min_indent = float('inf')
-        for line in lines:
-            if line.strip():
-                indent = len(line) - len(line.lstrip())
-                min_indent = min(min_indent, indent)
-
-        if min_indent == float('inf'):
-            min_indent = 0
-
-        chars = []
-        fg_colors = [] if (char_colors or fg) else None
-        max_width = 0
-
-        for line in lines:
-            if len(line) >= min_indent:
-                line = line[int(min_indent):]
-            else:
-                line = ''
-
-            row = list(line)
-            chars.append(row)
-            max_width = max(max_width, len(row))
-
-            if char_colors or fg:
-                color_row = []
-                for c in row:
-                    # char_colors takes priority, then fg, then None (use sprite default)
-                    if char_colors and c in char_colors:
-                        color_row.append(char_colors[c])
-                    elif fg:
-                        color_row.append(fg)
-                    else:
-                        color_row.append(None)
-                fg_colors.append(color_row)
-
-        for row in chars:
-            while len(row) < max_width:
-                row.append(' ')
-
-        if fg_colors:
-            for row in fg_colors:
-                while len(row) < max_width:
-                    row.append(None)
-
-        frame = SpriteFrame(chars, fg_colors)
-        self.frames.append(frame)
-        return len(self.frames) - 1
 
     def add_animation(self, animation: Animation) -> None:
         """
@@ -609,6 +510,238 @@ class Sprite:
                 self._visual_x = float(target_px)
                 self._visual_y = float(target_py)
 
+    def draw(self, window: "Window") -> None:
+        """Draw the sprite. Subclasses must implement this."""
+        raise NotImplementedError("Subclasses must implement draw()")
+
+
+class BaseEffectSprite:
+    """
+    Base class for effect sprites with velocity-based physics.
+
+    Provides shared functionality for EffectSprite and PixelEffectSprite:
+    - Float-based position (for smooth movement)
+    - Velocity and drag
+    - Fade and duration lifecycle
+
+    Subclasses must implement draw() and can override __init__ to add
+    frame-type-specific attributes (e.g., fg/bg colors for unicode sprites).
+    """
+
+    def __init__(
+        self,
+        frames: List,
+        origin: Tuple[int, int] = (0, 0),
+    ):
+        """
+        Initialize base effect sprite state.
+
+        Args:
+            frames: List of frame objects (SpriteFrame or PixelFrame)
+            origin: Offset in cells for positioning
+        """
+        self.frames = frames
+        self.origin = origin
+        self.current_frame = 0
+        self.visible = True
+        self.alive = True
+
+        # Position in cells (float for smooth movement)
+        self.x = 0.0
+        self.y = 0.0
+
+        # Velocity in cells per second
+        self.vx = 0.0
+        self.vy = 0.0
+
+        # Drag: velocity multiplier per second (0.1 = decays to 10% after 1 sec)
+        self.drag = 1.0  # 1.0 = no drag
+
+        # Fade: seconds until fully transparent (0 = no fade)
+        self.fade_time = 0.0
+        self._age = 0.0
+        self._initial_alpha = 255
+
+        # Duration: seconds until death (0 = infinite, use fade_time)
+        self.duration = 0.0
+
+        # Bloom: if True, always contributes to bloom (bypasses threshold)
+        self.emissive = False
+
+        # Lighting: if True, this sprite blocks light (casts shadows)
+        self.blocks_light = False
+
+        # Drawing order within window (higher = on top)
+        self.z_index = 0
+
+    def _compute_alpha(self) -> int:
+        """Compute current alpha based on fade progress."""
+        if self.fade_time <= 0:
+            return self._initial_alpha
+        fade_progress = min(1.0, self._age / self.fade_time)
+        return int(self._initial_alpha * (1.0 - fade_progress))
+
+    def update(self, dt: float, cell_width: int, cell_height: int) -> None:
+        """Update position, velocity, fade, and duration."""
+        if not self.alive:
+            return
+
+        # Track age
+        self._age += dt
+
+        # Apply velocity
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+
+        # Apply drag (frame-rate independent exponential decay)
+        if self.drag < 1.0 and self.drag > 0:
+            decay = self.drag ** dt
+            self.vx *= decay
+            self.vy *= decay
+
+        # Check duration (hard cutoff, no fade)
+        if self.duration > 0 and self._age >= self.duration:
+            self.alive = False
+            self.visible = False
+            return
+
+        # Check fade (soft cutoff with alpha transition)
+        if self.fade_time > 0 and self._age >= self.fade_time:
+            self.alive = False
+            self.visible = False
+
+    def draw(self, window: "Window") -> None:
+        """Draw the effect sprite. Subclasses must implement this."""
+        raise NotImplementedError("Subclasses must implement draw()")
+
+
+class Sprite(BaseAnimatedSprite):
+    """
+    A unicode sprite - a block of characters that moves as a unit.
+
+    Sprites support smooth movement between cells via interpolation.
+    The logical position (x, y) changes instantly on move_to(), while
+    the visual position smoothly interpolates toward it.
+    """
+
+    def __init__(
+        self,
+        frames: List[SpriteFrame],
+        fg: Tuple[int, int, int] = (255, 255, 255),
+        bg: Optional[Tuple[int, int, int, int]] = None,
+        origin: Tuple[int, int] = (0, 0),
+    ):
+        """
+        Create a sprite.
+
+        Args:
+            frames: List of SpriteFrame objects for animation
+            fg: Default foreground color for all characters
+            bg: Default background color (None = transparent)
+            origin: Offset for positioning (0,0 = top-left of sprite)
+        """
+        super().__init__(frames, origin)
+        self.fg = fg
+        self.bg = bg
+
+    def add_frame(
+        self,
+        pattern: str,
+        fg: Optional[Tuple[int, int, int]] = None,
+        char_colors: Optional[Dict[str, Tuple[int, int, int]]] = None,
+    ) -> int:
+        """
+        Add an animation frame from a pattern string.
+
+        Args:
+            pattern: Multi-line string defining the frame shape.
+                     Spaces are transparent. Leading/trailing blank lines are trimmed.
+            fg: Default foreground color for this frame (overrides sprite default)
+            char_colors: Optional dict mapping characters to foreground colors
+
+        Returns:
+            The index of the newly added frame
+
+        Example:
+            player = pyunicodegame.create_sprite('''
+                O
+               /|\\
+               / \\
+            ''', fg=(0, 255, 0))
+
+            # Add walk frames with different colors
+            player.add_frame('''
+                O
+               /|\\
+               /
+            ''', fg=(0, 200, 0))
+            player.add_frame('''
+                O
+               /|\\
+                 \\
+            ''', fg=(0, 150, 0))
+        """
+        # Parse pattern (same logic as create_sprite)
+        lines = pattern.split('\n')
+
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
+
+        if not lines:
+            frame = SpriteFrame([[]])
+            self.frames.append(frame)
+            return len(self.frames) - 1
+
+        min_indent = float('inf')
+        for line in lines:
+            if line.strip():
+                indent = len(line) - len(line.lstrip())
+                min_indent = min(min_indent, indent)
+
+        if min_indent == float('inf'):
+            min_indent = 0
+
+        chars = []
+        fg_colors = [] if (char_colors or fg) else None
+        max_width = 0
+
+        for line in lines:
+            if len(line) >= min_indent:
+                line = line[int(min_indent):]
+            else:
+                line = ''
+
+            row = list(line)
+            chars.append(row)
+            max_width = max(max_width, len(row))
+
+            if char_colors or fg:
+                color_row = []
+                for c in row:
+                    # char_colors takes priority, then fg, then None (use sprite default)
+                    if char_colors and c in char_colors:
+                        color_row.append(char_colors[c])
+                    elif fg:
+                        color_row.append(fg)
+                    else:
+                        color_row.append(None)
+                fg_colors.append(color_row)
+
+        for row in chars:
+            while len(row) < max_width:
+                row.append(' ')
+
+        if fg_colors:
+            for row in fg_colors:
+                while len(row) < max_width:
+                    row.append(None)
+
+        frame = SpriteFrame(chars, fg_colors)
+        self.frames.append(frame)
+        return len(self.frames) - 1
+
     def draw(self, window: Window) -> None:
         """Draw the sprite to a window at its visual position plus animation offset."""
         if not self.frames:
@@ -644,7 +777,7 @@ class Sprite:
                 window._put_at_pixel(px, py, char, fg, bg)
 
 
-class EffectSprite:
+class EffectSprite(BaseEffectSprite):
     """
     A visual-only sprite for effects (particles, sparks, explosions, etc.).
 
@@ -667,82 +800,16 @@ class EffectSprite:
         bg: Optional[Tuple[int, int, int, int]] = None,
         origin: Tuple[int, int] = (0, 0),
     ):
-        self.frames = frames
+        super().__init__(frames, origin)
         self.fg = fg
         self.bg = bg
-        self.origin = origin
-        self.current_frame = 0
-        self.visible = True
-        self.alive = True
-
-        # Position in cells (float for smooth movement)
-        self.x = 0.0
-        self.y = 0.0
-
-        # Velocity in cells per second
-        self.vx = 0.0
-        self.vy = 0.0
-
-        # Drag: velocity multiplier per second (0.1 = decays to 10% after 1 sec)
-        self.drag = 1.0  # 1.0 = no drag
-
-        # Fade: seconds until fully transparent (0 = no fade)
-        self.fade_time = 0.0
-        self._age = 0.0
-        self._initial_alpha = 255
-
-        # Duration: seconds until death (0 = infinite, use fade_time)
-        self.duration = 0.0
-
-        # Bloom: if True, always contributes to bloom (bypasses threshold)
-        self.emissive = False
-
-        # Lighting: if True, this sprite blocks light (casts shadows)
-        self.blocks_light = False
-
-        # Drawing order within window (higher = on top)
-        self.z_index = 0
-
-    def update(self, dt: float, cell_width: int, cell_height: int) -> None:
-        """Update position, velocity, fade, and duration."""
-        if not self.alive:
-            return
-
-        # Track age
-        self._age += dt
-
-        # Apply velocity
-        self.x += self.vx * dt
-        self.y += self.vy * dt
-
-        # Apply drag (frame-rate independent exponential decay)
-        if self.drag < 1.0 and self.drag > 0:
-            decay = self.drag ** dt
-            self.vx *= decay
-            self.vy *= decay
-
-        # Check duration (hard cutoff, no fade)
-        if self.duration > 0 and self._age >= self.duration:
-            self.alive = False
-            self.visible = False
-            return
-
-        # Check fade (soft cutoff with alpha transition)
-        if self.fade_time > 0 and self._age >= self.fade_time:
-            self.alive = False
-            self.visible = False
 
     def draw(self, window: Window) -> None:
         """Draw the effect sprite with current alpha."""
         if not self.frames or not self.visible:
             return
 
-        # Calculate current alpha based on fade progress
-        alpha = self._initial_alpha
-        if self.fade_time > 0:
-            fade_progress = min(1.0, self._age / self.fade_time)
-            alpha = int(self._initial_alpha * (1.0 - fade_progress))
-
+        alpha = self._compute_alpha()
         frame = self.frames[self.current_frame]
         base_px = self.x * window._cell_width - self.origin[0] * window._cell_width
         base_py = self.y * window._cell_height - self.origin[1] * window._cell_height
@@ -957,7 +1024,7 @@ class EffectSpriteEmitter:
         self.y = y
 
 
-class PixelSprite:
+class PixelSprite(BaseAnimatedSprite):
     """
     A pixel art sprite rendered at the window's logical resolution.
 
@@ -980,224 +1047,7 @@ class PixelSprite:
             frames: List of PixelFrame objects for animation
             origin: Offset in cells for positioning (0,0 = top-left of sprite)
         """
-        self.frames = frames
-        self.origin = origin
-        self.current_frame = 0
-        self.visible = True
-
-        # Logical position (changes instantly on move_to)
-        self.x = 0
-        self.y = 0
-
-        # Visual position (private, interpolates toward logical)
-        self._visual_x = 0.0  # In pixels
-        self._visual_y = 0.0
-        self._lerp_speed = 0.0  # Cells per second (0 = instant)
-        self._teleport_pending = False  # Flag to force snap on next update
-
-        # Animation system
-        self._animations: Dict[str, Animation] = {}
-        self._current_animation: Optional[str] = None
-        self._animation_frame_index: int = 0
-        self._animation_timer: float = 0.0
-        self._animation_finished: bool = False
-
-        # Animation offset interpolation in pixels (separate from movement)
-        self._target_offset_x: float = 0.0
-        self._target_offset_y: float = 0.0
-        self._current_offset_x: float = 0.0
-        self._current_offset_y: float = 0.0
-
-        # Bloom: if True, always contributes to bloom (bypasses threshold)
-        self.emissive = False
-
-        # Lighting: if True, this sprite blocks light (casts shadows)
-        self.blocks_light = False
-
-        # Drawing order within window (higher = on top)
-        self.z_index = 0
-
-    @property
-    def lerp_speed(self) -> float:
-        """Interpolation speed in cells per second (0 = instant snap)."""
-        return self._lerp_speed
-
-    @lerp_speed.setter
-    def lerp_speed(self, value: float) -> None:
-        self._lerp_speed = value
-
-    def move_to(self, x: int, y: int, teleport: bool = False) -> None:
-        """
-        Move the sprite to a new logical position.
-
-        Args:
-            x, y: Target position in cells
-            teleport: If True, snap visual position instantly (bypass interpolation)
-
-        The logical position always changes instantly. The visual position
-        will interpolate toward it based on lerp_speed, unless teleport=True.
-        """
-        self.x = x
-        self.y = y
-        if teleport:
-            self._teleport_pending = True
-
-    def add_animation(self, animation: Animation) -> None:
-        """
-        Register an animation with this sprite.
-
-        Args:
-            animation: Animation object to add
-        """
-        self._animations[animation.name] = animation
-
-    def play_animation(self, name: str, reset: bool = True) -> None:
-        """
-        Start playing a named animation.
-
-        Args:
-            name: Name of the animation to play
-            reset: If True, restart from frame 0; if False, continue from current frame
-
-        Raises:
-            KeyError: If no animation with that name exists
-        """
-        if name not in self._animations:
-            raise KeyError(f"No animation named '{name}'")
-
-        if reset or self._current_animation != name:
-            self._animation_frame_index = 0
-            self._animation_timer = 0.0
-            self._animation_finished = False
-
-        self._current_animation = name
-
-        # Set initial frame and offset
-        anim = self._animations[name]
-        self.current_frame = anim.frame_indices[0]
-        self._target_offset_x = anim.offsets[0][0]
-        self._target_offset_y = anim.offsets[0][1]
-
-    def stop_animation(self, reset_offset: bool = True) -> None:
-        """
-        Stop the current animation.
-
-        Args:
-            reset_offset: If True, interpolate offset back to (0, 0)
-        """
-        self._current_animation = None
-        self._animation_finished = False
-        if reset_offset:
-            self._target_offset_x = 0.0
-            self._target_offset_y = 0.0
-
-    def is_animation_playing(self, name: Optional[str] = None) -> bool:
-        """
-        Check if an animation is currently playing.
-
-        Args:
-            name: If specified, check if this specific animation is playing.
-                  If None, check if any animation is playing.
-
-        Returns:
-            True if the animation is playing
-        """
-        if name is None:
-            return self._current_animation is not None and not self._animation_finished
-        return self._current_animation == name and not self._animation_finished
-
-    def is_animation_finished(self) -> bool:
-        """
-        Check if a one-shot animation has completed.
-
-        Returns:
-            True if a non-looping animation has reached its last frame
-        """
-        return self._animation_finished
-
-    def update(self, dt: float, cell_width: int, cell_height: int) -> None:
-        """
-        Update the sprite's animation, offsets, and visual position.
-
-        Args:
-            dt: Delta time in seconds
-            cell_width: Width of a cell in pixels
-            cell_height: Height of a cell in pixels
-        """
-        # --- PHASE 1: Animation frame advancement ---
-        if self._current_animation and self._current_animation in self._animations:
-            anim = self._animations[self._current_animation]
-
-            if not self._animation_finished:
-                self._animation_timer += dt
-
-                # Advance frames based on timer
-                while self._animation_timer >= anim.frame_duration:
-                    self._animation_timer -= anim.frame_duration
-                    self._animation_frame_index += 1
-
-                    # Handle end of animation
-                    if self._animation_frame_index >= len(anim.frame_indices):
-                        if anim.loop:
-                            self._animation_frame_index = 0
-                        else:
-                            self._animation_frame_index = len(anim.frame_indices) - 1
-                            self._animation_finished = True
-                            break
-
-                # Update current frame from animation
-                frame_idx = anim.frame_indices[self._animation_frame_index]
-                self.current_frame = frame_idx
-
-                # Update target offset from animation
-                offset = anim.offsets[self._animation_frame_index]
-                self._target_offset_x = offset[0]
-                self._target_offset_y = offset[1]
-
-        # --- PHASE 2: Offset interpolation ---
-        anim = self._animations.get(self._current_animation) if self._current_animation else None
-        offset_speed = anim.offset_speed if anim else 0.0
-
-        if offset_speed <= 0:
-            # Instant offset
-            self._current_offset_x = self._target_offset_x
-            self._current_offset_y = self._target_offset_y
-        else:
-            # Smooth interpolation toward target offset
-            dx = self._target_offset_x - self._current_offset_x
-            dy = self._target_offset_y - self._current_offset_y
-            distance = math.sqrt(dx * dx + dy * dy)
-
-            if distance > 0.5:  # Small threshold
-                move_dist = min(offset_speed * dt, distance)
-                self._current_offset_x += (dx / distance) * move_dist
-                self._current_offset_y += (dy / distance) * move_dist
-            else:
-                self._current_offset_x = self._target_offset_x
-                self._current_offset_y = self._target_offset_y
-
-        # --- PHASE 3: Movement interpolation (existing logic) ---
-        target_px = self.x * cell_width
-        target_py = self.y * cell_height
-
-        if self._lerp_speed <= 0 or self._teleport_pending:
-            # Instant movement (snap)
-            self._visual_x = float(target_px)
-            self._visual_y = float(target_py)
-            self._teleport_pending = False
-        else:
-            dx = target_px - self._visual_x
-            dy = target_py - self._visual_y
-            distance = math.sqrt(dx * dx + dy * dy)
-
-            if distance > 0.5:  # Small threshold to avoid jitter
-                speed_px = self._lerp_speed * cell_width  # cells/sec -> pixels/sec
-                move_dist = min(speed_px * dt, distance)
-                self._visual_x += (dx / distance) * move_dist
-                self._visual_y += (dy / distance) * move_dist
-            else:
-                self._visual_x = float(target_px)
-                self._visual_y = float(target_py)
+        super().__init__(frames, origin)
 
     def draw(self, window: Window) -> None:
         """Draw the sprite to a window at its visual position plus animation offset."""
@@ -1214,7 +1064,7 @@ class PixelSprite:
         window.surface.blit(frame.surface, (int(px), int(py)))
 
 
-class PixelEffectSprite:
+class PixelEffectSprite(BaseEffectSprite):
     """
     A visual-only pixel sprite for effects (particles, sparks, explosions, etc.).
 
@@ -1242,80 +1092,14 @@ class PixelEffectSprite:
             frames: List of PixelFrame objects
             origin: Offset in cells for positioning
         """
-        self.frames = frames
-        self.origin = origin
-        self.current_frame = 0
-        self.visible = True
-        self.alive = True
-
-        # Position in cells (float for smooth movement)
-        self.x = 0.0
-        self.y = 0.0
-
-        # Velocity in cells per second
-        self.vx = 0.0
-        self.vy = 0.0
-
-        # Drag: velocity multiplier per second (0.1 = decays to 10% after 1 sec)
-        self.drag = 1.0  # 1.0 = no drag
-
-        # Fade: seconds until fully transparent (0 = no fade)
-        self.fade_time = 0.0
-        self._age = 0.0
-        self._initial_alpha = 255
-
-        # Duration: seconds until death (0 = infinite, use fade_time)
-        self.duration = 0.0
-
-        # Bloom: if True, always contributes to bloom (bypasses threshold)
-        self.emissive = False
-
-        # Lighting: if True, this sprite blocks light (casts shadows)
-        self.blocks_light = False
-
-        # Drawing order within window (higher = on top)
-        self.z_index = 0
-
-    def update(self, dt: float, cell_width: int, cell_height: int) -> None:
-        """Update position, velocity, fade, and duration."""
-        if not self.alive:
-            return
-
-        # Track age
-        self._age += dt
-
-        # Apply velocity
-        self.x += self.vx * dt
-        self.y += self.vy * dt
-
-        # Apply drag (frame-rate independent exponential decay)
-        if self.drag < 1.0 and self.drag > 0:
-            decay = self.drag ** dt
-            self.vx *= decay
-            self.vy *= decay
-
-        # Check duration (hard cutoff, no fade)
-        if self.duration > 0 and self._age >= self.duration:
-            self.alive = False
-            self.visible = False
-            return
-
-        # Check fade (soft cutoff with alpha transition)
-        if self.fade_time > 0 and self._age >= self.fade_time:
-            self.alive = False
-            self.visible = False
+        super().__init__(frames, origin)
 
     def draw(self, window: Window) -> None:
         """Draw the effect sprite with current alpha."""
         if not self.frames or not self.visible:
             return
 
-        # Calculate current alpha based on fade progress
-        alpha = self._initial_alpha
-        if self.fade_time > 0:
-            fade_progress = min(1.0, self._age / self.fade_time)
-            alpha = int(self._initial_alpha * (1.0 - fade_progress))
-
+        alpha = self._compute_alpha()
         frame = self.frames[self.current_frame]
         px = self.x * window._cell_width - self.origin[0] * window._cell_width
         py = self.y * window._cell_height - self.origin[1] * window._cell_height
